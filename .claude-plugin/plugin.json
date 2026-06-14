@@ -1,0 +1,8 @@
+{
+  "name": "pixel-sprite-generator",
+  "displayName": "Pixel Sprite Generator",
+  "version": "0.1.0",
+  "description": "Generate square pixel-art sprites from semantic JSON grids + palettes. Deterministic, no external image model.",
+  "author": { "name": "MisterVitoPro" },
+  "keywords": ["pixel-art", "sprites", "2d", "game-dev", "textures"]
+}
