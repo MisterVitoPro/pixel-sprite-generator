@@ -30,7 +30,12 @@ Author: MisterVitoPro
 ## Configuration (`pixel-sprite.config.json`)
 
 ```json
-{ "size": 16, "shapes_dir": "art/shapes", "palettes_dir": "art/palettes", "out_dir": "assets/sprites" }
+{
+  "size": 16,
+  "shapes_dir": "art/shapes",
+  "palettes_dir": "art/palettes",
+  "out_dir": "assets/sprites"
+}
 ```
 
 `size` must be a power of two (8, 16, 32, 64, ...). Every CLI flag (`--size`, `--shapes-dir`,
