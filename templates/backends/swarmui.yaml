@@ -1,0 +1,31 @@
+# SwarmUI (two-step: GetNewSession then GenerateText2Image, image fetched by path)
+backend:
+  model: "OfficialStableDiffusion/sd_xl_base_1.0"
+  gen_size: 1024
+  timeout: 180
+  prep:
+    method: POST
+    url: "http://127.0.0.1:7801/API/GetNewSession"
+    headers: { Content-Type: application/json }
+    body: {}
+    capture:
+      session_id: "session_id"
+  request:
+    method: POST
+    url: "http://127.0.0.1:7801/API/GenerateText2Image"
+    headers: { Content-Type: application/json }
+    body:
+      session_id: "${session_id}"
+      images: 1
+      prompt: "${prompt}"
+      negativeprompt: "${negative}"
+      model: "${model}"
+      width: ${gen_width}
+      height: ${gen_height}
+      steps: 30
+      cfgscale: 7
+      seed: ${seed}
+  response:
+    image_path: "images.0"
+    image_kind: url
+    fetch_base: "http://127.0.0.1:7801/"

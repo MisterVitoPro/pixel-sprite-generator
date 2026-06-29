@@ -39,7 +39,7 @@ def generate_sprite(spec: "ig.SpriteSpec", cfg, collect: Optional[dict] = None) 
     """Image path for one spec. Generates the base once; recolors cheap material variants,
     regenerates only outputs flagged regenerate:true. Returns written output names."""
     width, height = ig.resolve_dims(spec, cfg.size)
-    base_seed = spec.gen.get("seed", cfg.image.params.get("seed"))
+    base_seed = spec.gen.get("seed")
     base_img: Optional[Image.Image] = None
     written: list[str] = []
     cfg.out_dir.mkdir(parents=True, exist_ok=True)
@@ -47,12 +47,12 @@ def generate_sprite(spec: "ig.SpriteSpec", cfg, collect: Optional[dict] = None) 
         opts = opts or {}
         if opts.get("regenerate"):
             pos, neg = ig.build_prompt(spec, opts, cfg.prompt)
-            raw = ig.generate(pos, neg, cfg.image, opts.get("seed", base_seed))
+            raw = ig.generate(pos, neg, cfg.backend, opts.get("seed", base_seed))
             img = ppmod.process(raw, cfg.postprocess, width, height, cfg.palettes_dir)
         else:
             if base_img is None:
                 pos, neg = ig.build_prompt(spec, {}, cfg.prompt)
-                raw = ig.generate(pos, neg, cfg.image, base_seed)
+                raw = ig.generate(pos, neg, cfg.backend, base_seed)
                 base_img = ppmod.process(raw, cfg.postprocess, width, height, cfg.palettes_dir)
             recolor_name = opts.get("recolor")
             if recolor_name:
