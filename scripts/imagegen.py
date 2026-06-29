@@ -6,11 +6,25 @@ import dataclasses
 from pathlib import Path
 from typing import Optional
 
+import base64
+import io
+import json
+import os
+import urllib.error
+import urllib.request
+
 try:
     import yaml
 except ImportError:  # pragma: no cover
     import sys
     sys.stderr.write("Error: PyYAML is not installed. Install it with:\n  pip install PyYAML\n")
+    raise SystemExit(2)
+
+try:
+    from PIL import Image
+except ImportError:  # pragma: no cover
+    import sys
+    sys.stderr.write("Error: Pillow is not installed. Install it with:\n  pip install Pillow\n")
     raise SystemExit(2)
 
 
@@ -94,3 +108,49 @@ def build_prompt(spec: SpriteSpec, output_opts: dict, prompt_cfg) -> tuple[str, 
         negatives.append(spec.negative)
     negative = ", ".join(n for n in negatives if n)
     return positive, negative
+
+
+class BackendUnavailable(Exception):
+    """The image backend could not be reached or returned an unusable response (exit code 3)."""
+
+
+def _request_body(positive: str, negative: str, image_cfg, seed) -> dict:
+    body = {
+        "model": image_cfg.model,
+        "prompt": positive,
+        "negative_prompt": negative,
+        "size": f"{image_cfg.gen_size}x{image_cfg.gen_size}",
+        "n": 1,
+        "response_format": "b64_json",
+    }
+    for k, v in (image_cfg.params or {}).items():
+        if v is not None:
+            body[k] = v
+    if seed is not None:
+        body["seed"] = seed
+    return body
+
+
+def generate(positive: str, negative: str, image_cfg, seed) -> "Image.Image":
+    body = _request_body(positive, negative, image_cfg, seed)
+    data = json.dumps(body).encode("utf-8")
+    headers = {"Content-Type": "application/json"}
+    if image_cfg.api_key_env:
+        key = os.environ.get(image_cfg.api_key_env)
+        if key:
+            headers["Authorization"] = f"Bearer {key}"
+    req = urllib.request.Request(image_cfg.endpoint, data=data, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=image_cfg.timeout) as resp:
+            raw = resp.read()
+    except (urllib.error.URLError, OSError, TimeoutError) as exc:
+        raise BackendUnavailable(f"image backend unreachable at {image_cfg.endpoint}: {exc}") from exc
+    try:
+        parsed = json.loads(raw)
+        b64 = parsed["data"][0]["b64_json"]
+        img = Image.open(io.BytesIO(base64.b64decode(b64)))
+        return img.convert("RGBA")
+    except (ValueError, KeyError, IndexError, TypeError) as exc:
+        raise BackendUnavailable(
+            f"image backend at {image_cfg.endpoint} returned an unusable response: {exc}"
+        ) from exc
