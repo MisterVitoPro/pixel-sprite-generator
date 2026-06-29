@@ -104,7 +104,7 @@ outputs:
 
 ## Writing subject prompts
 
-The `prompt.prefix`, `prompt.suffix`, and `negative` fields in `pixel-sprite.config.yaml`
+The `prompt.prefix`, `prompt.suffix`, and `prompt.negative` fields in `pixel-sprite.config.yaml`
 carry the house style (pixel art, RGBA, NxN, etc.) so each spec holds **only the subject**.
 Write for these qualities:
 
