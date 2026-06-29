@@ -1,0 +1,10 @@
+# Example sprite spec in the image-gen format.
+# This file documents the spec schema; it is not rendered by the grid-mode showcase.
+# To render it against a live backend: python render_sprites.py --mode image --only hero
+
+id: hero
+prompt: a brave knight in a green tunic, front-facing idle pose, simple readable silhouette
+size: 32
+outputs:
+  hero: {}
+  hero_gold: { recolor: example }   # silhouette-identical recolor using the example palette

@@ -1,65 +1,145 @@
 ---
 name: pixel-sprite-generator
-description: Use when generating a square pixel-art sprite/icon/texture for a 2D game or app from a semantic JSON grid. Authors a shape grid (<shapes_dir>/<id>.json) plus color palettes and renders them to real PNGs via the bundled scripts/render_sprites.py -- no external image model. Triggers on requests like "generate the player-idle sprite", "make a 32x32 icon for X", "render the <id> sprite", "pixel art for X", or any ask pairing a sprite id with image/texture/icon generation in a project that uses pixel-sprite.config.json.
+description: Use when generating a square pixel-art sprite/icon/texture for a 2D game or app. Generates from a subject prompt spec (image-gen first) with a deterministic grid as fallback, driven by pixel-sprite.config.yaml. Triggers on requests like "generate the player-idle sprite", "make a 32x32 icon for X", "render the <id> sprite", "pixel art for X", or any ask pairing a sprite id with image/texture/icon generation in a project that uses pixel-sprite.config.yaml.
 ---
 
 # Pixel Sprite Generator
 
 ## Overview
 
-This skill produces real square RGBA PNG sprites through a deterministic, self-contained
-pipeline -- there is NO external image model and NO manual downscale/chroma-key step:
+This skill produces square RGBA PNG sprites through an image-generation-first pipeline: it
+calls a local OpenAI-compatible image model and post-processes the result into a small pixel-art
+PNG. If the backend is unreachable it exits with code 3 and you stop to ask the user about the
+deterministic grid fallback.
 
 ```
-  you author                          converter renders
-  <shapes_dir>/<id>.json        +     scripts/render_sprites.py   ->  <out_dir>/<output>.png
-    (semantic char grid)              (validates, maps chars->hex,     (one PNG per `outputs`
-  <palettes_dir>/<name>.json           writes strict NxN RGBA)          entry)
-    (char -> hex color / gradient)
+  you author                            scripts/render_sprites.py
+  art/sprites/<id>.yaml          ->     image model (default)        ->  <out_dir>/<output>.png
+    (subject prompt + outputs)          OR
+  art/shapes/<id>.json (fallback)       deterministic grid renderer
+  art/palettes/<name>.json              (on --mode grid / --fallback-grid)
 ```
 
-You author a JSON pixel-grid by hand; the Python converter turns it into the final PNG(s).
-Every output is exactly `size` x `size` (a power of two from the project config; default 16) --
-the converter hard-fails on anything else.
+**Pick the size to fit the subject.** Tiles, props, and item icons are 16x16; a standing
+character needs 16x32 (a person crammed into 16x16 reads squished). Bump to 32x32 for
+large/detailed subjects.
 
 The script is bundled with this plugin. Invoke it from the project root as:
 `python "${CLAUDE_PLUGIN_ROOT}/scripts/render_sprites.py" [flags]`
 
 ## Project configuration
 
-The renderer reads `pixel-sprite.config.json` from the project root:
+The renderer reads `pixel-sprite.config.yaml` from the project root. A minimal config:
 
-```json
-{ "size": 16, "shapes_dir": "art/shapes", "palettes_dir": "art/palettes", "out_dir": "assets/sprites" }
+```yaml
+size: 16
+sprites_dir: art/sprites
+shapes_dir: art/shapes
+palettes_dir: art/palettes
+out_dir: assets/sprites
 ```
 
-`size` must be a power of two. CLI flags (`--size`, `--shapes-dir`, `--palettes-dir`,
-`--out-dir`, `--config`) override the file per run. If a project has no config yet, run
+CLI flags (`--size`, `--sprites-dir`, `--shapes-dir`, `--palettes-dir`, `--out-dir`,
+`--config`) override the file per run. If a project has no config yet, run
 `/pixel-sprite-generator:init` to scaffold the config, directories, and a worked example.
 
 ## The workflow (follow every time)
 
-1. **Resolve inputs**: a `sprite_id` and which palette(s)/variants to produce. If ambiguous,
-   ask once.
-2. **Author the shape grid** at `<shapes_dir>/<sprite_id>.json`: a `size` x `size` grid using
-   semantic chars (see the char convention). Set the `outputs` map: one entry per output PNG,
-   naming the palette for each.
-3. **Render**: `python "${CLAUDE_PLUGIN_ROOT}/scripts/render_sprites.py" --only <sprite_id>`.
-4. **LOOK at it** (do not skip -- `--check` only proves it is NxN with valid chars, NOT that it
-   reads as the subject). Upscale and view it, e.g.:
+1. **Resolve a `sprite_id`.** If ambiguous, ask once.
+2. **Author or locate `art/sprites/<id>.yaml`** -- a subject `prompt` plus optional `size`,
+   `negative`, `gen`, and `outputs` map (see "Sprite spec schema" below).
+3. **Run the renderer:**
+   ```
+   python "${CLAUDE_PLUGIN_ROOT}/scripts/render_sprites.py" --only <id>
+   ```
+4. **Vision review loop** -- do not skip:
    ```python
    from PIL import Image
    Image.open("<out_dir>/<id>.png").resize((256, 256), Image.NEAREST).save(".tmp_preview.png")
    # then Read .tmp_preview.png
    ```
-   Confirm it reads as the intended subject and has NO detached/floating pixels. Revise and
-   re-render if it does not. Delete any `.tmp_*` preview files when done.
-5. **Report**: confirm the PNG paths written.
+   Upscale and LOOK at the PNG. If off-model, revise the spec's `prompt`, `negative`, or
+   `gen.seed` and re-run. Delete any `.tmp_*` preview files when done.
+5. **On exit code 3** (backend unavailable): STOP. Ask the user whether to render the grid
+   fallback. Grid fallback requires `art/shapes/<id>.json`; if absent, offer to author one (see
+   "Grid fallback" below). Then run:
+   ```
+   python "${CLAUDE_PLUGIN_ROOT}/scripts/render_sprites.py" --only <id> --mode grid
+   ```
+   or, to auto-fallback on any future backend failure:
+   ```
+   python "${CLAUDE_PLUGIN_ROOT}/scripts/render_sprites.py" --only <id> --fallback-grid
+   ```
+6. **Report the written PNG paths.**
 
-Do NOT hand the user a prompt to paste elsewhere. Do NOT open an image editor. The deliverable
-is the committed shape JSON plus the rendered PNG(s).
+Use `--check` at any time to validate config and sources without writing:
+```
+python "${CLAUDE_PLUGIN_ROOT}/scripts/render_sprites.py" --check
+```
 
-## Shape file schema (`<shapes_dir>/<id>.json`)
+Do NOT hand the user a prompt to paste elsewhere. The deliverable is the authored spec plus the
+rendered PNG(s).
+
+## Sprite spec schema (`art/sprites/<id>.yaml`)
+
+```yaml
+id: gem
+size: 16                       # optional; inherits project default
+prompt: "single gemstone, octagonal facets, top-down view, glowing cyan teal core"
+negative: "blur, photorealistic, 3d render"
+gen:
+  seed: 42                     # optional; omit for random
+outputs:
+  gem: {}                      # output PNG basename -> options
+  gem_rare:
+    recolor: gem_rare_palette  # cheap palette swap, same silhouette
+  gem_cursed:
+    regenerate: true           # fresh image call; different form allowed
+    seed: 99
+```
+
+- `id` must equal the filename stem.
+- `outputs` maps each output PNG basename to options (`recolor`, `regenerate`, `seed`).
+- Omit `size` to inherit the project default.
+
+## Writing subject prompts
+
+The `prompt.prefix`, `prompt.suffix`, and `prompt.negative` fields in `pixel-sprite.config.yaml`
+carry the house style (pixel art, RGBA, NxN, etc.) so each spec holds **only the subject**.
+Write for these qualities:
+
+- **Silhouette**: name the defining shape first. "single sword, cruciform silhouette" is better
+  than "cool weapon".
+- **View angle**: state it. "front-facing", "3/4 overhead", or "side view". Pixel art is
+  unforgiving about ambiguous perspective.
+- **Palette/material words**: "glowing cyan", "rusted iron", "hand-painted wood grain". These
+  drive color more reliably than color names alone.
+- **Lighting**: implied upper-left source is conventional for pixel art; say "top-left lit" or
+  "cell-shaded" if the house style does not already say so.
+- **Small-size readability**: avoid fine detail that collapses to noise at 16x16. Prefer words
+  like "bold silhouette", "minimal detail", "iconic shape".
+- **Negative**: list anything the model reaches for that you don't want -- "blur, photorealistic,
+  3d render, gradient background, shadow under".
+
+### Variants
+
+`recolor:` (cheap, silhouette-identical)
+: Swaps pixel colors by mapping the base image's palette to a named target palette. The
+  silhouette and texel positions are unchanged. Use for material or rarity tints where the form
+  should be identical.
+
+`regenerate: true` (fresh call, differing form)
+: Issues a new image generation call with the same subject prompt. The resulting form may differ
+  (different pose, slightly different silhouette). Use when you want genuine variation, not just
+  a tint. Pair with a per-output `seed` for reproducibility.
+
+## Grid fallback
+
+When the image backend is unavailable (exit code 3) or the user prefers deterministic output,
+render from a hand-authored shape grid instead. This path is unchanged from earlier versions
+and requires `art/shapes/<id>.json`.
+
+### Shape file schema (`art/shapes/<id>.json`)
 
 ```json
 {
@@ -70,22 +150,25 @@ is the committed shape JSON plus the rendered PNG(s).
 }
 ```
 
-- `id` MUST equal the filename stem.
-- `size` MUST equal the configured size.
-- `outputs` maps each output PNG basename (no extension) to a palette name. One shape can
-  produce several PNGs (e.g. material/rarity variants) from one grid.
-- `rows` MUST be exactly `size` strings of exactly `size` chars. `.` is transparent.
+A non-square shape uses `width`/`height` instead of `size`:
 
-The converter hard-fails (no silent fixes) on: wrong row count/length, a char not in the
-resolved palette, a `size` mismatch, an `id` that does not match the filename, a missing
-palette, or an `extends` cycle. Run `render_sprites.py --check` to validate without writing.
+```json
+{ "id": "hero", "width": 16, "height": 32, "outputs": { "hero": "hero" }, "rows": ["...32 rows of 16 chars..."] }
+```
 
-## Semantic char convention (recommended starter vocabulary)
+- `id` must equal the filename stem.
+- Dimensions: give EITHER `size` (square shorthand) OR `width` + `height` (rectangle), never
+  both. Each must be a power of two.
+- `outputs` maps each output PNG basename to a palette name.
+- `rows` must be exactly `height` strings of exactly `width` chars. `.` is transparent.
 
-A char names a **role**, not a color -- the palette supplies the color per variant, so one grid
-renders to every variant. This table is a sensible default for shaded objects; adopt, extend,
-or replace it for your game's needs (just define every non-`.` char you use in each referenced
-palette).
+The converter hard-fails (no silent fixes) on: wrong row count/length, an undefined char, a
+non-power-of-two dimension, specifying both `size` and `width`/`height`, an `id` mismatch, a
+missing palette, or an `extends` cycle.
+
+### Semantic char convention (recommended starter vocabulary)
+
+A char names a **role**, not a color -- the palette supplies the color per variant.
 
 | char | role |
 |---|---|
@@ -100,63 +183,83 @@ palette).
 
 Only `.` may appear without being defined in the palette.
 
-## Palettes (`<palettes_dir>/<name>.json`)
+### Palettes (`art/palettes/<name>.json`)
 
 ```json
 { "extends": null, "colors": { "B": "#9BE7FF", "b": "#4FB8E8", "a": "#FFD27D" } }
 ```
 
 Colors are `#RRGGBB` / `#RRGGBBAA` (or `null` to force transparent). `extends` names a base
-palette whose colors are inherited then overridden -- use it so a variant that changes one
-accent does not duplicate a whole palette.
+palette to inherit then override -- use it so a one-accent variant does not duplicate a whole
+palette.
 
-### Gradients
+#### Gradients
 
-A char's value may be a **gradient object** instead of a flat hex; the converter interpolates a
-smooth ramp across that char's cells:
+A char's value may be a gradient object; the converter interpolates a smooth ramp across that
+char's cells:
 
 ```json
 "g": { "from": "#9BE7FF", "to": "#2A6CA6", "axis": "diag" }
 ```
 
-- `axis` is one of: `x` (left->right), `y` (top->bottom), `diag` (top-left->bottom-right),
-  `adiag` (bottom-left->top-right). `from`/`to` are `#RRGGBB` / `#RRGGBBAA` (alpha interpolates;
-  `null` is not allowed inside a gradient -- use `.` for transparency).
-- The ramp is measured over the extent of that char's own cells along the axis: the cell nearest
-  the axis start gets `from`, the farthest gets `to`, the rest interpolate. A single-line extent
-  resolves to `from`. Reach for gradients on wide forms; keep flat `B`/`b`/`s` on thin 2px shapes.
+`axis` is one of: `x` (left->right), `y` (top->bottom), `diag` (top-left->bottom-right),
+`adiag` (bottom-left->top-right). `null` is not allowed inside a gradient -- use `.` for
+transparency. Reach for gradients on wide forms; keep flat `B`/`b`/`s` on thin 2px shapes.
 
-## Composition & readability (hard-won lessons)
+### Forcing grid mode
 
-`--check` passing means the grid is valid, not that it looks like the subject. After rendering,
-LOOK at the upscaled PNG and apply these:
+To render grid sources for all sprites at once (skip image model entirely):
 
-- **Cell-shaded with an implied upper-left light source:** `B` highlight on the top/left edge of
-  a form, `b` for the body, `s` on the bottom/right. Stair-step diagonals one pixel at a time; no
-  smooth curves.
-- **It must read as ITS subject, not a generic blob.** Give distinctive parts enough cells to be
-  recognizable (a 1-2 cell "head" is ambiguous).
-- **No detached/floating pixels.** Every opaque cell must be 8-connected to the body. Stray
-  accents, gaps between a part and the body, and floating details are the most common failures --
-  trace connectivity row by row.
-- **Thin is fine when the subject is thin;** don't pad genuinely slender shapes. Abstract icons
-  may be blobby -- they have no "correct" silhouette.
-- **Match visual weight across a family** so sprites meant to sit together don't look broken.
-- **Keep it readable at small sizes:** 4-6 colors per material region.
+```
+python "${CLAUDE_PLUGIN_ROOT}/scripts/render_sprites.py" --mode grid
+```
+
+To render a single sprite's grid source:
+
+```
+python "${CLAUDE_PLUGIN_ROOT}/scripts/render_sprites.py" --only <id> --mode grid
+```
 
 ## Batch requests
 
-For "all the gems" / "every rarity variant", author each shape file, then render all at once:
-`python "${CLAUDE_PLUGIN_ROOT}/scripts/render_sprites.py"` (no `--only`). Each shape's `outputs`
-produces its own PNG(s).
+For "all the gems" / "every sprite in the set", author each spec file, then render all at once:
+
+```
+python "${CLAUDE_PLUGIN_ROOT}/scripts/render_sprites.py"
+```
+
+Each spec's `outputs` produces its own PNG(s).
+
+## Packing a spritesheet + atlas (`--pack`)
+
+Real 2D games ship a single packed spritesheet plus a metadata atlas, not one PNG per sprite
+at runtime. Add `--pack` to emit these alongside the individual PNGs:
+
+```
+python "${CLAUDE_PLUGIN_ROOT}/scripts/render_sprites.py" --pack
+```
+
+This writes `<out_dir>/spritesheet.png` (every rendered sprite on a name-sorted, near-square
+grid) and `<out_dir>/spritesheet.json` -- a TexturePacker / Aseprite JSON-hash atlas that
+loads as-is in Phaser, PixiJS, Godot, and Unity. Flags: `--pack-name <basename>` (default
+`spritesheet`) and `--pack-cols <n>` (default near-square). Use `--pack` WITHOUT `--only` so
+the sheet contains the whole set.
+
+**Animations:** name outputs `<base>_f0`, `<base>_f1`, ... and the packer groups contiguous
+frames into an Aseprite `frameTags` entry automatically -- a multi-frame walk cycle becomes a
+named animation in the atlas with no extra config.
 
 ## Common mistakes to avoid
 
-- **Don't emit a prompt for an external image model.** This skill renders the PNG locally.
-- **Don't author off-size grids.** Exactly `size` rows x `size` chars; the converter hard-fails.
-- **Don't use an undefined char.** Every non-`.` char must exist in the referenced palette(s).
-- **Don't inline one-off colors.** New material -> new palette file (use `extends` for single-
-  accent variants).
-- **Don't ship a grid you haven't LOOKED at.** `--check` passes off-model art happily. Render,
-  upscale, and view it before reporting.
-- **Don't leave floating pixels.** Every opaque cell must touch the body (8-connected).
+- **Do not emit a prompt for an external image model.** Run render_sprites.py locally instead.
+- **Do not skip the vision review loop.** `--check` proves the spec is valid, not that it looks
+  right. Render, upscale, and look at it before reporting.
+- **On exit code 3, stop and ask.** Do not silently fall back to the grid without user consent
+  unless `--fallback-grid` was already requested.
+- **Do not leave `.tmp_*` preview files.** Delete them after the review loop.
+- **Do not inline one-off colors in a palette.** New material -> new palette file; use `extends`
+  for single-accent variants.
+- **Do not author off-size grids.** Exactly `height` rows of exactly `width` chars; the
+  converter hard-fails.
+- **Do not leave floating pixels in grid sources.** Every opaque cell must be 8-connected to
+  the body. Trace connectivity row by row.

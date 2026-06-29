@@ -1,0 +1,6 @@
+id: hero
+prompt: a brave knight in a green tunic, front-facing idle pose, simple readable silhouette
+size: 32
+outputs:
+  hero: {}
+  hero_gold: { recolor: example }   # silhouette-identical recolor of the base (no extra model call)

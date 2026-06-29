@@ -1,0 +1,42 @@
+{
+  "id": "hero",
+  "width": 16,
+  "height": 32,
+  "outputs": {
+    "hero": "hero"
+  },
+  "rows": [
+    "................",
+    "................",
+    "....oooooooo....",
+    "...oHHhhhhhho...",
+    "...ohhhhhhhho...",
+    "...ohkkkkkkho...",
+    "...okkokkokko...",
+    "...okkkkkkkko...",
+    "...okkkKKkkko...",
+    "....okkkkkko....",
+    "......okko......",
+    "..oTttttttttso..",
+    "..okkTttttskko..",
+    "..okkTttttskko..",
+    "..okkTttttskko..",
+    "..okkTttttskko..",
+    "...oaaaaaaaao...",
+    "...oppppppppo...",
+    "...oPpppppppo...",
+    "...oppp..pppo...",
+    "...oPpp..ppPo...",
+    "...oppp..pppo...",
+    "...oppp..pppo...",
+    "...oppp..pppo...",
+    "...oppp..pppo...",
+    "...oUuu..uuUo...",
+    "...ouuu..uuuo...",
+    "...ouuu..uuuo...",
+    "...oooo..oooo...",
+    "................",
+    "................",
+    "................"
+  ]
+}

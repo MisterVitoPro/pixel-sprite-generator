@@ -1,8 +1,8 @@
 {
   "name": "pixel-sprite-generator",
   "displayName": "Pixel Sprite Generator",
-  "version": "0.1.0",
-  "description": "Generate square pixel-art sprites from semantic JSON grids + palettes. Deterministic, no external image model.",
+  "version": "0.2.0",
+  "description": "Generate pixel-art sprites via local image-model-first generation with deterministic JSON-grid fallback. Configured via pixel-sprite.config.yaml.",
   "author": { "name": "MisterVitoPro" },
-  "keywords": ["pixel-art", "sprites", "2d", "game-dev", "textures"]
+  "keywords": ["pixel-art", "sprites", "2d", "game-dev", "textures", "image-generation"]
 }

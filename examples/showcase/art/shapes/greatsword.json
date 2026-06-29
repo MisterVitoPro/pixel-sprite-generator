@@ -1,0 +1,27 @@
+{
+  "id": "greatsword",
+  "size": 16,
+  "outputs": {
+    "greatsword": "iron",
+    "greatsword_diamond": "diamond",
+    "greatsword_netherite": "netherite"
+  },
+  "rows": [
+    "............sBBs",
+    "...........sBBBs",
+    "..........sBBBBs",
+    ".........sBBBBs.",
+    "........sBBBBs..",
+    ".......sBBBBs...",
+    "......sBBBBs....",
+    ".....sBBBBs.....",
+    "..oo.sBBBs......",
+    "..oboBBBs.......",
+    "...obBBs........",
+    "...oboo.........",
+    "..kwobo.........",
+    ".kWoboo.........",
+    "oowoo...........",
+    "ooo............."
+  ]
+}

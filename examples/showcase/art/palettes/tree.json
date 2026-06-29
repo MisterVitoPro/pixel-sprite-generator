@@ -1,0 +1,11 @@
+{
+  "extends": null,
+  "colors": {
+    "o": "#14210f",
+    "g": { "from": "#7fc24a", "to": "#2f6b2a", "axis": "diag" },
+    "L": "#aee06b",
+    "d": "#1f5a1e",
+    "w": "#6b4a2b",
+    "W": "#8a6438"
+  }
+}
