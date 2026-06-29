@@ -1,11 +1,13 @@
 # pixel-sprite-generator showcase config
-# This example uses mode: grid so it renders deterministically from hand-authored shape files
-# with no live backend required. Suitable for CI and offline demos.
+# The showcase renders deterministically from hand-authored 32x32 JSON shape grids
+# (mode: grid) -- no live backend required, so it works in CI and offline. The SwarmUI
+# backend below is wired in so the same sprites can be regenerated through the image
+# model with: render_sprites.py --mode image
 
-# Sprite output size in pixels
-size: 16
+# Sprite output size in pixels (power of two). All four showcase sprites are 32x32.
+size: 32
 
-# Force the deterministic shape-grid renderer; no image model required
+# Force the deterministic shape-grid renderer; the backend block is not contacted in grid mode.
 mode: grid
 
 # Directories (relative to this file)
@@ -13,3 +15,42 @@ sprites_dir: art/sprites
 shapes_dir: art/shapes
 palettes_dir: art/palettes
 out_dir: assets/sprites
+
+# Prompt template (used only on the image-model path, mode: image)
+prompt:
+  prefix: "pixel art sprite of"
+  suffix: "centered, plain magenta background, crisp pixels, limited palette, no anti-aliasing"
+  negative: "blurry, photorealistic, drop shadow, extra limbs, watermark, text"
+
+# image backend: copy a preset from templates/backends/ (openai | a1111 | swarmui)
+# SwarmUI (two-step: GetNewSession then GenerateText2Image, image fetched by path)
+backend:
+  model: "OfficialStableDiffusion/sd_xl_base_1.0"
+  gen_size: 512
+  timeout: 180
+  prep:
+    method: POST
+    url: "http://127.0.0.1:7801/API/GetNewSession"
+    headers: { Content-Type: application/json }
+    body: {}
+    capture:
+      session_id: "session_id"
+  request:
+    method: POST
+    url: "http://127.0.0.1:7801/API/GenerateText2Image"
+    headers: { Content-Type: application/json }
+    body:
+      session_id: "${session_id}"
+      images: 1
+      prompt: "${prompt}"
+      negativeprompt: "${negative}"
+      model: "${model}"
+      width: ${gen_width}
+      height: ${gen_height}
+      steps: 30
+      cfgscale: 7
+      seed: ${seed}
+  response:
+    image_path: "images.0"
+    image_kind: url
+    fetch_base: "http://127.0.0.1:7801/"

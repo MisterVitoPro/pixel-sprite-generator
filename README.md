@@ -203,29 +203,38 @@ Force the grid renderer for the entire run with `--mode grid`.
 
 ## Showcase
 
-Every sprite below was rendered with `--mode grid` from a hand-authored JSON grid -- no
-external image model. Sizes fit the subject the way real games do: the props are 16x16 tiles,
-the character is **16x32** (a standing person needs the vertical room -- 16x16 reads as
-squished). The shape and palette sources live in [`examples/showcase/`](examples/showcase)
-(previews are nearest-neighbor upscales of the real PNGs).
+Every sprite below is **32x32** and was rendered with `--mode grid` from a hand-authored JSON
+grid -- the deterministic JSON-data path, no external image model. The showcase config also
+wires in the **SwarmUI** backend, so the same four subjects can be regenerated through the
+image model with `--mode image` once a SwarmUI server is running. The shape and palette sources
+live in [`examples/showcase/`](examples/showcase) (previews are nearest-neighbor upscales of the
+real PNGs).
 
-| Weapon | Character | Environment | | |
-|:---:|:---:|:---:|:---:|:---:|
-| ![greatsword](examples/showcase/preview/greatsword.png) | ![hero](examples/showcase/preview/hero.png) | ![tree](examples/showcase/preview/tree.png) | ![bush](examples/showcase/preview/bush.png) | ![barrel](examples/showcase/preview/barrel.png) |
-| greatsword | hero | tree | bush | barrel |
+| Character | Weapon | Tree | Building |
+|:---:|:---:|:---:|:---:|
+| ![character](examples/showcase/preview/character.png) | ![battleaxe](examples/showcase/preview/battleaxe.png) | ![tree](examples/showcase/preview/tree.png) | ![building](examples/showcase/preview/building.png) |
+| character | battleaxe | tree | building |
 
 **One grid, many materials.** A single shape's `outputs` map can name several palettes, so the
-greatsword renders straight to iron, diamond, and netherite from the *same* grid -- no redrawing:
+battleaxe renders straight to iron, diamond, and netherite from the *same* grid -- no redrawing:
 
 | iron | diamond | netherite |
 |:---:|:---:|:---:|
-| ![iron](examples/showcase/preview/greatsword.png) | ![diamond](examples/showcase/preview/greatsword_diamond.png) | ![netherite](examples/showcase/preview/greatsword_netherite.png) |
+| ![iron](examples/showcase/preview/battleaxe.png) | ![diamond](examples/showcase/preview/battleaxe_diamond.png) | ![netherite](examples/showcase/preview/battleaxe_netherite.png) |
 
 Reproduce them from the repo root with:
 
 ```sh
 cd examples/showcase
 python "${CLAUDE_PLUGIN_ROOT}/scripts/render_sprites.py" --mode grid
+```
+
+To regenerate the same set through the SwarmUI image model instead (server running on
+`127.0.0.1:7801`), swap the path:
+
+```sh
+cd examples/showcase
+python "${CLAUDE_PLUGIN_ROOT}/scripts/render_sprites.py" --mode image
 ```
 
 ## Spritesheet + atlas packing (`--pack`)
@@ -239,21 +248,21 @@ python "${CLAUDE_PLUGIN_ROOT}/scripts/render_sprites.py" --pack
 ```
 
 The showcase set packs into one `spritesheet.png` plus a `spritesheet.json` **TexturePacker /
-Aseprite-compatible atlas** that loads as-is in Phaser, PixiJS, Godot, and Unity. Uniform sprites
-go on a tidy grid; mixed sizes (the 16x32 hero next to 16x16 props) are shelf-packed, and every
-frame records its true rect:
+Aseprite-compatible atlas** that loads as-is in Phaser, PixiJS, Godot, and Unity. The six
+uniform 32x32 frames (the battleaxe in three materials, plus character, tree, and building) go
+on a tidy grid, and every frame records its true rect:
 
 ![packed spritesheet](examples/showcase/preview/spritesheet.png)
 
 ```json
 {
   "frames": {
-    "barrel":     { "frame": {"x": 0, "y": 0, "w": 16, "h": 16}, "sourceSize": {"w": 16, "h": 16}, "duration": 100 },
-    "greatsword": { "frame": {"x": 0, "y": 16, "w": 16, "h": 16}, "sourceSize": {"w": 16, "h": 16}, "duration": 100 },
-    "hero":       { "frame": {"x": 16, "y": 32, "w": 16, "h": 32}, "sourceSize": {"w": 16, "h": 32}, "duration": 100 }
+    "battleaxe": { "frame": {"x": 0, "y": 0, "w": 32, "h": 32}, "sourceSize": {"w": 32, "h": 32}, "duration": 100 },
+    "building":  { "frame": {"x": 0, "y": 32, "w": 32, "h": 32}, "sourceSize": {"w": 32, "h": 32}, "duration": 100 },
+    "character": { "frame": {"x": 32, "y": 32, "w": 32, "h": 32}, "sourceSize": {"w": 32, "h": 32}, "duration": 100 }
   },
   "meta": { "app": "pixel-sprite-generator", "image": "spritesheet.png",
-            "format": "RGBA8888", "size": {"w": 32, "h": 80}, "frameTags": [] }
+            "format": "RGBA8888", "size": {"w": 96, "h": 64}, "frameTags": [] }
 }
 ```
 
@@ -274,6 +283,7 @@ Name a shape's outputs `walk_f0`, `walk_f1`, ... and the packer auto-groups them
 2. In your game project, run `/pixel-sprite-generator:init` to create `pixel-sprite.config.yaml`,
    the `art/sprites`, `art/shapes`, and `art/palettes` directories, an `assets/sprites` output
    directory, and a worked example.
-3. Start your local image model server and update `image.endpoint` in the config if needed.
+3. Start your local image model server and point the `backend:` block in the config at it (or
+   copy a preset from `templates/backends/`); see the [Backends](#backends) section.
 4. Render the example: `python "${CLAUDE_PLUGIN_ROOT}/scripts/render_sprites.py" --only gem`
 5. Ask Claude to "generate the <id> sprite" -- the skill authors the spec and renders the PNG.

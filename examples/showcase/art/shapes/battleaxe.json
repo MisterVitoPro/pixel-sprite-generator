@@ -1,0 +1,43 @@
+{
+  "id": "battleaxe",
+  "size": 32,
+  "outputs": {
+    "battleaxe": "iron",
+    "battleaxe_diamond": "diamond",
+    "battleaxe_netherite": "netherite"
+  },
+  "rows": [
+    "................................",
+    "...........o........o...........",
+    "..........osBo....oBso..........",
+    ".........osBBBo..oBBBso.........",
+    "........osBBBBBooBBBBBso........",
+    ".......osBBBBBBBBBBBBBBso.......",
+    "......osBBBBBBBBBBBBBBBBso......",
+    ".....osBBBBBBBBBBBBBBBBBBso.....",
+    "....osBBBBBBBBBBBBBBBBBBBBso....",
+    "....obBBBBBBBBBoooBBBBBBBBbo....",
+    ".....obBBBBBBBowwwoBBBBBBbo.....",
+    "......obBBBBBowWWWwoBBBBbo......",
+    ".......obBBBBowWkWwoBBBBbo......",
+    "........obBBowwWkWwwoBBbo.......",
+    ".........oboowWWkWWwoobo........",
+    "...........owWWkkWWwo...........",
+    "...........owWkkkkWwo...........",
+    "............owWkkWwo............",
+    "............owWkkWwo............",
+    "............owWkkWwo............",
+    "............owWkkWwo............",
+    "............owWkkWwo............",
+    "............owWkkWwo............",
+    "............owWkkWwo............",
+    "............owWkkWwo............",
+    "............owWkkWwo............",
+    "............owWkkWwo............",
+    "............owWkkWwo............",
+    ".............owkkwo.............",
+    ".............owkkwo.............",
+    "..............owwo..............",
+    "...............oo..............."
+  ]
+}

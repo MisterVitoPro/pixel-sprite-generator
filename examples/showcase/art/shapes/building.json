@@ -1,0 +1,41 @@
+{
+  "id": "building",
+  "size": 32,
+  "outputs": {
+    "building": "building"
+  },
+  "rows": [
+    "................................",
+    "...............oo...............",
+    ".............ooRRoo.............",
+    "...........ooRRRRRRoo...........",
+    ".........ooRRRRRRRRRRoo.........",
+    ".......ooRRRRRRRRRRRRRRoo.......",
+    ".....ooRRRRRRRRRRRRRRRRRRoo.....",
+    "....orrrrrrrrrrrrrrrrrrrrro.....",
+    "....orRRRRRRRRRRRRRRRRRRRro.....",
+    "....orrrrrrrrrrrrrrrrrrrrro.....",
+    "....owwwwwwwwwwwwwwwwwwwwwo.....",
+    "....owWWwoffffowWWwoffffwwo.....",
+    "....owWWwofggfowWWwofggfwwo.....",
+    "....owwwwofggfowwwwofggfwwo.....",
+    "....owwwwoffffowwwwoffffwwo.....",
+    "....owwwwwwwwwwwwwwwwwwwwwo.....",
+    "....owWWWwwwwwwwwwwwwwwWWwo.....",
+    "....owwwwwwoooooooowwwwwwwo.....",
+    "....owwwwwodddddddowwWWwwwo.....",
+    "....owWWwwodDddddowwwwwwwwo.....",
+    "....owwwwwoddddddowwWWwwwwo.....",
+    "....owwwwwoddddddowwwwwwwwo.....",
+    "....owWWwwoddddddowwwwwWWwo.....",
+    "....owwwwwoddddddowwwwwwwwo.....",
+    "....owwwwwoddddddowwWWwwwwo.....",
+    "....owwwwwoddddddowwwwwwwwo.....",
+    "...osssssssssssssssssssssssso...",
+    "...osSSssSSssSSssSSssSSssSSso...",
+    "...osssssssssssssssssssssssso...",
+    "....oooooooooooooooooooooo......",
+    "................................",
+    "................................"
+  ]
+}

@@ -1,115 +1,10 @@
 {
   "frames": {
-    "barrel": {
+    "battleaxe": {
       "frame": {
         "x": 0,
         "y": 0,
-        "w": 16,
-        "h": 16
-      },
-      "rotated": false,
-      "trimmed": false,
-      "spriteSourceSize": {
-        "x": 0,
-        "y": 0,
-        "w": 16,
-        "h": 16
-      },
-      "sourceSize": {
-        "w": 16,
-        "h": 16
-      },
-      "duration": 100
-    },
-    "bush": {
-      "frame": {
-        "x": 16,
-        "y": 0,
-        "w": 16,
-        "h": 16
-      },
-      "rotated": false,
-      "trimmed": false,
-      "spriteSourceSize": {
-        "x": 0,
-        "y": 0,
-        "w": 16,
-        "h": 16
-      },
-      "sourceSize": {
-        "w": 16,
-        "h": 16
-      },
-      "duration": 100
-    },
-    "greatsword": {
-      "frame": {
-        "x": 0,
-        "y": 16,
-        "w": 16,
-        "h": 16
-      },
-      "rotated": false,
-      "trimmed": false,
-      "spriteSourceSize": {
-        "x": 0,
-        "y": 0,
-        "w": 16,
-        "h": 16
-      },
-      "sourceSize": {
-        "w": 16,
-        "h": 16
-      },
-      "duration": 100
-    },
-    "greatsword_diamond": {
-      "frame": {
-        "x": 16,
-        "y": 16,
-        "w": 16,
-        "h": 16
-      },
-      "rotated": false,
-      "trimmed": false,
-      "spriteSourceSize": {
-        "x": 0,
-        "y": 0,
-        "w": 16,
-        "h": 16
-      },
-      "sourceSize": {
-        "w": 16,
-        "h": 16
-      },
-      "duration": 100
-    },
-    "greatsword_netherite": {
-      "frame": {
-        "x": 0,
-        "y": 32,
-        "w": 16,
-        "h": 16
-      },
-      "rotated": false,
-      "trimmed": false,
-      "spriteSourceSize": {
-        "x": 0,
-        "y": 0,
-        "w": 16,
-        "h": 16
-      },
-      "sourceSize": {
-        "w": 16,
-        "h": 16
-      },
-      "duration": 100
-    },
-    "hero": {
-      "frame": {
-        "x": 16,
-        "y": 32,
-        "w": 16,
+        "w": 32,
         "h": 32
       },
       "rotated": false,
@@ -117,33 +12,117 @@
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 16,
+        "w": 32,
         "h": 32
       },
       "sourceSize": {
-        "w": 16,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 100
+    },
+    "battleaxe_diamond": {
+      "frame": {
+        "x": 32,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "duration": 100
+    },
+    "battleaxe_netherite": {
+      "frame": {
+        "x": 64,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "duration": 100
+    },
+    "building": {
+      "frame": {
+        "x": 0,
+        "y": 32,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "duration": 100
+    },
+    "character": {
+      "frame": {
+        "x": 32,
+        "y": 32,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
         "h": 32
       },
       "duration": 100
     },
     "tree": {
       "frame": {
-        "x": 0,
-        "y": 64,
-        "w": 16,
-        "h": 16
+        "x": 64,
+        "y": 32,
+        "w": 32,
+        "h": 32
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 16,
-        "h": 16
+        "w": 32,
+        "h": 32
       },
       "sourceSize": {
-        "w": 16,
-        "h": 16
+        "w": 32,
+        "h": 32
       },
       "duration": 100
     }
@@ -154,8 +133,8 @@
     "image": "spritesheet.png",
     "format": "RGBA8888",
     "size": {
-      "w": 32,
-      "h": 80
+      "w": 96,
+      "h": 64
     },
     "scale": "1",
     "frameTags": []
