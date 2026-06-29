@@ -14,7 +14,9 @@ sprites_dir: art/sprites
 shapes_dir: art/shapes
 palettes_dir: art/palettes
 out_dir: out
-image: {endpoint: "http://x/v1/images/generations", model: m}
+backend:
+  request: {url: "http://x/v1/images/generations", body: {prompt: "${prompt}"}}
+  response: {image_path: data.0.b64_json}
 postprocess: {background: {method: none}, quantize: {enabled: false}}
 """
 
