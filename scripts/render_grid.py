@@ -1,36 +1,17 @@
 #!/usr/bin/env python3
 """
-Render JSON pixel-grid sources into square RGBA PNG sprites.
+Grid renderer: compile JSON pixel-grid sources into square RGBA PNG sprites.
 
-You (or Claude) author a size-independent shape grid under <shapes_dir>/<id>.json using
-semantic characters, plus reusable color palettes under <palettes_dir>/<name>.json that map
-each character to a hex color (or a gradient). This converter cross-products a shape against
-the palettes named in its `outputs` map and writes one square PNG per output into <out_dir>.
-
-Paths and the sprite size come from a project config file (pixel-sprite.config.json in the
-current working directory) and/or CLI flags. All paths resolve relative to the consuming
-project, never to this script's bundled location.
-
-Usage:
-  python render_sprites.py                  # render every shape, using the project config
-  python render_sprites.py --only gem
-  python render_sprites.py --check          # validate all shapes+palettes, write nothing
-  python render_sprites.py --out-dir build --size 32   # override config per run
-
-Exit codes:
-  0  success / all valid
-  1  validation failure (a malformed shape or palette)
-  2  environment error (Pillow missing, dirs missing, missing/invalid config)
+Reads size-independent shape grids (semantic character maps) and reusable color
+palettes, cross-products each shape against its named palettes, and renders one
+PNG per output. Supports single files, batch validation, and spritesheet (atlas)
+packing.
 
 Requires: Pillow (PIL fork). Install with: pip install Pillow
 """
 
 from __future__ import annotations
 
-from render_grid import *  # noqa
-
-import argparse
-import dataclasses
 import json
 import math
 import re
@@ -59,22 +40,9 @@ DEFAULT_PACK_NAME = "spritesheet"
 # An output named "<base>_f<n>" is treated as animation frame n of "<base>".
 FRAME_SUFFIX = re.compile(r"^(?P<base>.+)_f(?P<index>\d+)$")
 
-CONFIG_FILENAME = "pixel-sprite.config.json"
-DEFAULT_CONFIG = {
-    "size": DEFAULT_SIZE,
-    "shapes_dir": "art/shapes",
-    "palettes_dir": "art/palettes",
-    "out_dir": "assets/sprites",
-}
-CONFIG_KEYS = set(DEFAULT_CONFIG)
-
 
 class RenderError(Exception):
     """Raised on any invalid shape or palette. Carries a human-readable message."""
-
-
-class ConfigError(Exception):
-    """Raised on a missing/invalid configuration (environment error -> exit code 2)."""
 
 
 # --------------------------------------------------------------------------- #
@@ -428,169 +396,3 @@ def write_pack(images: dict[str, "Image.Image"], out_dir: Path, size: int,
     sheet.save(png_path, format="PNG", optimize=True)
     json_path.write_text(json.dumps(atlas, indent=2) + "\n", encoding="utf-8")
     return png_path, json_path
-
-
-# --------------------------------------------------------------------------- #
-# configuration
-# --------------------------------------------------------------------------- #
-
-@dataclasses.dataclass
-class Config:
-    """Resolved render configuration. Dirs are absolute Paths."""
-    size: int
-    shapes_dir: Path
-    palettes_dir: Path
-    out_dir: Path
-
-
-def _read_config_json(path: Path) -> dict:
-    """Read + strict-validate a config JSON object. Raises ConfigError."""
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise ConfigError(f"{path.name}: invalid JSON: {exc}") from exc
-    if not isinstance(data, dict):
-        raise ConfigError(f"{path.name}: config must be a JSON object")
-    unknown = set(data) - CONFIG_KEYS
-    if unknown:
-        raise ConfigError(f"{path.name}: unknown config key(s): {sorted(unknown)}")
-    return data
-
-
-def load_config(project_root: Path, config_path: Optional[Path], overrides: dict) -> Config:
-    """Resolve effective configuration from an optional file plus CLI overrides.
-
-    project_root: directory that relative paths resolve against by default (the CWD).
-    config_path:  explicit --config path; if given it must exist, and its parent directory
-                  anchors relative paths in the file. If None, look for pixel-sprite.config.json
-                  in project_root.
-    overrides:    dict with keys size/shapes_dir/palettes_dir/out_dir; None values are ignored.
-
-    A missing config file is an error UNLESS at least one CLI override is supplied. Built-in
-    defaults fill any key not set by the file or CLI. `size` must be a positive power of two.
-    """
-    file_data: dict = {}
-    found = False
-    if config_path is not None:
-        if not config_path.is_file():
-            raise ConfigError(f"config file not found: {config_path}")
-        file_data = _read_config_json(config_path)
-        found = True
-        anchor = config_path.resolve().parent
-    else:
-        default_path = project_root / CONFIG_FILENAME
-        if default_path.is_file():
-            file_data = _read_config_json(default_path)
-            found = True
-        anchor = project_root
-
-    has_cli = any(v is not None for v in overrides.values())
-    if not found and not has_cli:
-        raise ConfigError(
-            f"No {CONFIG_FILENAME} found in {project_root} and no CLI overrides given. "
-            f"Run /pixel-sprite-generator:init to scaffold one, or pass --config / --out-dir etc."
-        )
-
-    merged = dict(DEFAULT_CONFIG)
-    merged.update(file_data)
-    merged.update({k: v for k, v in overrides.items() if v is not None})
-
-    size = merged["size"]
-    if not is_power_of_two(size):
-        raise ConfigError(f"size must be a positive power of two, got {size!r}")
-
-    return Config(
-        size=size,
-        shapes_dir=(anchor / merged["shapes_dir"]).resolve(),
-        palettes_dir=(anchor / merged["palettes_dir"]).resolve(),
-        out_dir=(anchor / merged["out_dir"]).resolve(),
-    )
-
-
-# --------------------------------------------------------------------------- #
-# CLI
-# --------------------------------------------------------------------------- #
-
-def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="Render shape JSON grids into square PNG sprites.")
-    parser.add_argument("--config", metavar="PATH", help="path to a pixel-sprite.config.json (default: ./pixel-sprite.config.json)")
-    parser.add_argument("--only", metavar="ID", help="render a single shape by id (filename stem)")
-    parser.add_argument("--check", action="store_true", help="validate all shapes+palettes; write nothing")
-    parser.add_argument("--size", type=int, help="override sprite size (must be a power of two)")
-    parser.add_argument("--shapes-dir", help="override shapes directory")
-    parser.add_argument("--palettes-dir", help="override palettes directory")
-    parser.add_argument("--out-dir", help="override output directory")
-    parser.add_argument("--pack", action="store_true",
-                        help="also pack the rendered sprites into one spritesheet PNG + a "
-                             "TexturePacker/Aseprite-compatible JSON atlas")
-    parser.add_argument("--pack-name", default=DEFAULT_PACK_NAME,
-                        help=f"basename for the packed sheet + atlas (default: {DEFAULT_PACK_NAME})")
-    parser.add_argument("--pack-cols", type=int, default=None,
-                        help="columns in the packed sheet (default: near-square)")
-    args = parser.parse_args(argv)
-
-    project_root = Path.cwd()
-    overrides = {
-        "size": args.size,
-        "shapes_dir": args.shapes_dir,
-        "palettes_dir": args.palettes_dir,
-        "out_dir": args.out_dir,
-    }
-    try:
-        cfg = load_config(project_root, Path(args.config) if args.config else None, overrides)
-    except ConfigError as exc:
-        sys.stderr.write(f"Error: {exc}\n")
-        return 2
-
-    if not cfg.shapes_dir.is_dir():
-        sys.stderr.write(f"Error: shapes directory not found: {cfg.shapes_dir}\n")
-        return 2
-    if not cfg.palettes_dir.is_dir():
-        sys.stderr.write(f"Error: palettes directory not found: {cfg.palettes_dir}\n")
-        return 2
-
-    if args.check:
-        errors = validate_all(cfg.shapes_dir, cfg.palettes_dir, cfg.size)
-        if errors:
-            for e in errors:
-                sys.stderr.write(f"  {e}\n")
-            sys.stderr.write(f"\n{len(errors)} shape(s) invalid.\n")
-            return 1
-        count = len(list(cfg.shapes_dir.glob("*.json")))
-        print(f"All {count} shape(s) in {cfg.shapes_dir} are valid.")
-        return 0
-
-    if args.only:
-        shape_path = cfg.shapes_dir / f"{args.only}.json"
-        if not shape_path.is_file():
-            sys.stderr.write(f"Error: shape not found: {shape_path}\n")
-            return 2
-        shape_paths = [shape_path]
-    else:
-        shape_paths = sorted(cfg.shapes_dir.glob("*.json"))
-        if not shape_paths:
-            print(f"No shape files in {cfg.shapes_dir}")
-            return 0
-
-    total = 0
-    collected: Optional[dict[str, "Image.Image"]] = {} if args.pack else None
-    try:
-        for shape_path in shape_paths:
-            written = render_file(shape_path, cfg.palettes_dir, cfg.out_dir, cfg.size, collect=collected)
-            for name in written:
-                print(f"  rendered {name}.png")
-            total += len(written)
-        if args.pack and collected:
-            png_path, json_path = write_pack(collected, cfg.out_dir, cfg.size,
-                                             args.pack_name, args.pack_cols)
-            print(f"  packed {len(collected)} frame(s) -> {png_path.name} + {json_path.name}")
-    except RenderError as exc:
-        sys.stderr.write(f"Error: {exc}\n")
-        return 1
-
-    print(f"\nDone. {total} sprite(s) written to {cfg.out_dir}")
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
