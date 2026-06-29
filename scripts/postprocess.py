@@ -25,6 +25,16 @@ def _luma(rgb) -> float:
     return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
 
 
+def flattened_pixels(img: "Image.Image"):
+    """Flat sequence of pixel tuples.
+
+    Prefers Pillow's get_flattened_data(); Image.getdata() is deprecated and slated for
+    removal in Pillow 14. Falls back to getdata() on older Pillow that lacks the new API.
+    """
+    getter = getattr(img, "get_flattened_data", None)
+    return getter() if getter is not None else img.getdata()
+
+
 def downscale(img: "Image.Image", width: int, height: int, method: str = "nearest") -> "Image.Image":
     return img.convert("RGBA").resize((width, height), _RESAMPLE[method])
 
@@ -74,7 +84,7 @@ def load_target_palette(palettes_dir: Path, name: str) -> list[tuple[int, int, i
 
 def recolor(img: "Image.Image", target: list[tuple[int, int, int, int]]) -> "Image.Image":
     img = img.convert("RGBA")
-    uniq = sorted({p[:3] for p in img.getdata() if p[3] == 255}, key=_luma)
+    uniq = sorted({p[:3] for p in flattened_pixels(img) if p[3] == 255}, key=_luma)
     if not uniq:
         return img
     mapping: dict[tuple[int, int, int], tuple[int, int, int, int]] = {}

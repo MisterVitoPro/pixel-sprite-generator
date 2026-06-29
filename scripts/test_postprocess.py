@@ -26,7 +26,7 @@ def test_quantize_reduces_color_count():
         for j in range(8):
             img.putpixel((i, j), (i * 30 % 256, j * 30 % 256, 0, 255))
     out = pp.quantize(img, 4)
-    opaque = {p[:3] for p in out.getdata() if p[3] == 255}
+    opaque = {p[:3] for p in pp.flattened_pixels(out) if p[3] == 255}
     assert len(opaque) <= 4
 
 def test_recolor_maps_onto_target_ramp():
@@ -34,7 +34,7 @@ def test_recolor_maps_onto_target_ramp():
     img.putpixel((0, 0), (200, 200, 200, 255))
     target = [(0, 0, 0, 255), (255, 255, 255, 255)]
     out = pp.recolor(img, target)
-    colors = {p[:3] for p in out.getdata()}
+    colors = {p[:3] for p in pp.flattened_pixels(out)}
     assert colors <= {(0, 0, 0), (255, 255, 255)}
 
 def test_add_outline_adds_dark_border_pixels():
