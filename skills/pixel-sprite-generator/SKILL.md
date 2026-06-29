@@ -8,9 +8,9 @@ description: Use when generating a square pixel-art sprite/icon/texture for a 2D
 ## Overview
 
 This skill produces square RGBA PNG sprites through an image-generation-first pipeline: it
-calls a local OpenAI-compatible image model and post-processes the result into a small pixel-art
-PNG. If the backend is unreachable it exits with code 3 and you stop to ask the user about the
-deterministic grid fallback.
+calls the configured backend and post-processes the result into a small pixel-art PNG. If the
+backend is unreachable it exits with code 3 and you stop to ask the user about the deterministic
+grid fallback.
 
 ```
   you author                            scripts/render_sprites.py
@@ -37,11 +37,14 @@ sprites_dir: art/sprites
 shapes_dir: art/shapes
 palettes_dir: art/palettes
 out_dir: assets/sprites
+backend: openai  # or: a1111, swarmui, or a custom backend: block
 ```
 
-CLI flags (`--size`, `--sprites-dir`, `--shapes-dir`, `--palettes-dir`, `--out-dir`,
-`--config`) override the file per run. If a project has no config yet, run
-`/pixel-sprite-generator:init` to scaffold the config, directories, and a worked example.
+The `backend:` field specifies the image generation backend. Use a preset name (copy from
+`templates/backends/`) or paste a full backend block. CLI flags (`--size`, `--sprites-dir`,
+`--shapes-dir`, `--palettes-dir`, `--out-dir`, `--config`) override the file per run. If a
+project has no config yet, run `/pixel-sprite-generator:init` to scaffold the config,
+directories, and a worked example.
 
 ## The workflow (follow every time)
 

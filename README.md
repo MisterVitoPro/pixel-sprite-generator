@@ -8,11 +8,11 @@ Author: MisterVitoPro
 
 ## How it works
 
-The default path sends a prompt to a **local OpenAI-compatible image model** (e.g. a Stable
-Diffusion server), post-processes the result into a small RGBA PNG, and writes it to your output
-directory. When the backend is unreachable the script exits with code 3 so CI pipelines can
-detect the failure cleanly. Pass `--fallback-grid` to render the sprite from a hand-authored
-JSON grid instead of failing, or `--mode grid` to always use the grid renderer.
+The default path sends a prompt to **the configured backend**, post-processes the result into
+a small RGBA PNG, and writes it to your output directory. When the backend is unreachable the
+script exits with code 3 so CI pipelines can detect the failure cleanly. Pass `--fallback-grid`
+to render the sprite from a hand-authored JSON grid instead of failing, or `--mode grid` to
+always use the grid renderer.
 
 ```
 art/sprites/<id>.yaml   ->  image model  ->  post-process  ->  assets/sprites/<id>.png
@@ -54,25 +54,17 @@ art/shapes/<id>.json    ->  grid renderer ->                ->  assets/sprites/<
 
 ## Configuration (`pixel-sprite.config.yaml`)
 
+A minimal config:
+
 ```yaml
 size: 16
-mode: auto          # auto | image | grid
+mode: auto
 sprites_dir: art/sprites
 shapes_dir: art/shapes
 palettes_dir: art/palettes
 out_dir: assets/sprites
 
-image:
-  endpoint: http://localhost:8080/v1/images/generations
-  model: sd-pixel
-  api_key_env: null   # env var name holding the API key, or null
-  timeout: 120
-  gen_size: 512
-  params:
-    steps: 30
-    cfg_scale: 7
-    sampler: euler_a
-    seed: null
+backend: openai  # or: a1111, swarmui, or a custom backend block
 
 prompt:
   prefix: "pixel art sprite of"
@@ -80,9 +72,9 @@ prompt:
   negative: "blurry, photorealistic, drop shadow, extra limbs, watermark, text"
 
 postprocess:
-  downscale: nearest      # nearest | box | lanczos
+  downscale: nearest
   background:
-    method: chroma        # chroma | alpha_threshold | none
+    method: chroma
     color: "#FF00FF"
     tolerance: 20
   quantize:
@@ -97,8 +89,58 @@ pack:
 ```
 
 `size` is the project default and must be a power of two (8, 16, 32, 64, ...). Individual
-shapes can override it with `width`/`height`. Every CLI flag (`--size`, `--shapes-dir`,
+shapes can override it with `width`/`height`. Every CLI flag (`--size`, `--sprites-dir`,
 `--palettes-dir`, `--out-dir`, `--config`, `--mode`) overrides the file for a single run.
+
+## Backends
+
+The renderer supports pluggable, config-driven image backends. Configure the backend via the
+`backend:` field in `pixel-sprite.config.yaml` (use a preset name or paste a backend block).
+Three presets are shipped:
+
+| Preset | Description |
+|--------|-------------|
+| `openai` | OpenAI-compatible API (OpenAI, local Stable Diffusion server, etc.) |
+| `a1111` | Automatic1111 Stable Diffusion WebUI |
+| `swarmui` | SwarmUI local image generation server |
+
+Copy a preset from `templates/backends/` into your config, or define a custom backend block:
+
+```yaml
+backend:
+  prep: |
+    # Python code to prepare the request payload (optional)
+  request:
+    method: POST
+    url: ${env:IMAGE_ENDPOINT}
+    headers: {}
+    auth: ${env:API_KEY}  # Unset env var drops this key
+  response:
+    kind: auto  # base64 | url | auto
+    fetch_base: false  # Fetch URLs and return as base64 if true
+    image_key: image  # JSON path to extract the image
+```
+
+### Placeholders
+
+Template variables substituted in `backend:` strings:
+
+- `${prompt}` -- positive prompt (assembled from `prompt.prefix`, spec subject, `prompt.suffix`)
+- `${negative}` -- negative prompt (from `prompt.negative`)
+- `${model}` -- model ID (from spec `gen.model` or default)
+- `${gen_width}`, `${gen_height}`, `${gen_size}` -- generation dimensions in pixels
+- `${seed}` -- random seed (from spec `gen.seed` or None)
+- `${env:NAME}` -- environment variable; unset variables are skipped
+- Prep-captured variables -- any Python variable in `prep:` is available as `${var_name}`
+
+### Placeholder rules
+
+- **Type preservation**: `${seed}`, `${gen_width}`, `${gen_height}`, `${gen_size}` remain JSON
+  numbers; `${prompt}`, `${negative}`, `${model}` are strings.
+- **None-drops-key**: If a placeholder is None or an env var is unset, the entire key is omitted.
+  For example, unset `${env:API_KEY}` in `auth:` drops the auth header entirely.
+- **Environment-only secrets**: All config keys come from `${env:NAME}` substitution, never from
+  the file itself, ensuring secrets stay out of version control.
 
 ## Prompt template
 
