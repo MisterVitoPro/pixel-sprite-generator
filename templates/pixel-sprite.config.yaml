@@ -1,0 +1,52 @@
+# pixel-sprite-generator project configuration
+# Copy to your project root as pixel-sprite.config.yaml and edit as needed.
+# All paths are relative to the directory containing this file.
+
+# Output sprite size in pixels (must be a positive power of two: 8, 16, 32, 64 ...)
+size: 16
+
+# Render mode: auto (image model; fall back if unreachable), image (always model), grid (always shape grid)
+mode: auto
+
+# Directories (relative to this file)
+sprites_dir: art/sprites
+shapes_dir: art/shapes
+palettes_dir: art/palettes
+out_dir: assets/sprites
+
+# Image generation backend (OpenAI-compatible endpoint)
+image:
+  endpoint: http://localhost:8080/v1/images/generations
+  model: sd-pixel
+  api_key_env: null       # env var name whose value is sent as Bearer token; null = no auth
+  timeout: 120            # seconds before the request is aborted
+  gen_size: 512           # resolution requested from the model (pre-downscale)
+  params:
+    steps: 30
+    cfg_scale: 7
+    sampler: euler_a
+    seed: null            # null = random each run; set an integer for reproducibility
+
+# Prompt construction: final prompt = "<prefix> <spec.prompt> <suffix>"
+prompt:
+  prefix: "pixel art sprite of"
+  suffix: "centered, plain magenta background, crisp pixels, limited palette, no anti-aliasing"
+  negative: "blurry, photorealistic, drop shadow, extra limbs, watermark, text"
+
+# Post-processing pipeline applied to every generated image
+postprocess:
+  downscale: nearest      # algorithm used to shrink gen_size -> size (nearest | box | lanczos)
+  background:
+    method: chroma        # how to remove the background (chroma | alpha_threshold | none)
+    color: "#FF00FF"      # chroma key color (magenta)
+    tolerance: 20         # per-channel tolerance for chroma removal
+  quantize:
+    enabled: true
+    colors: 16            # maximum palette entries
+    palette: null         # name of a palettes_dir/<palette>.json to snap colors to; null = free
+  outline: false          # add a 1-pixel black outline around opaque regions
+
+# Spritesheet packing (written alongside individual PNGs when enabled)
+pack:
+  enabled: false
+  name: spritesheet
