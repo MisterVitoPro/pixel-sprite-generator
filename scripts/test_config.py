@@ -64,20 +64,20 @@ def test_missing_config_without_overrides_errors(tmp_path):
 
 def test_backend_requires_request_and_response(tmp_path):
     write_cfg(tmp_path, "size: 16\nbackend: {response: {image_path: x}}\n")
-    with pytest.raises(cfg.ConfigError):
+    with pytest.raises(cfg.ConfigError, match=r'request'):
         cfg.load_config(tmp_path, None, {})
     write_cfg(tmp_path, "size: 16\nbackend: {request: {url: x, body: {}}}\n")
-    with pytest.raises(cfg.ConfigError):
+    with pytest.raises(cfg.ConfigError, match=r'response'):
         cfg.load_config(tmp_path, None, {})
 
 def test_invalid_image_kind_rejected(tmp_path):
     write_cfg(tmp_path, MINIMAL + "\n    image_kind: sideways\n")
-    with pytest.raises(cfg.ConfigError):
+    with pytest.raises(cfg.ConfigError, match=r'image_kind'):
         cfg.load_config(tmp_path, None, {})
 
 def test_unknown_backend_key_rejected(tmp_path):
     write_cfg(tmp_path, MINIMAL + "\n  bogus: 1\n")
-    with pytest.raises(cfg.ConfigError):
+    with pytest.raises(cfg.ConfigError, match=r'bogus'):
         cfg.load_config(tmp_path, None, {})
 
 def test_prep_and_auth_parse(tmp_path):
