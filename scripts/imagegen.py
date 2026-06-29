@@ -10,6 +10,7 @@ import base64
 import io
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 
@@ -114,43 +115,181 @@ class BackendUnavailable(Exception):
     """The image backend could not be reached or returned an unusable response (exit code 3)."""
 
 
-def _request_body(positive: str, negative: str, image_cfg, seed) -> dict:
-    body = {
-        "model": image_cfg.model,
-        "prompt": positive,
-        "negative_prompt": negative,
-        "size": f"{image_cfg.gen_size}x{image_cfg.gen_size}",
-        "n": 1,
-        "response_format": "b64_json",
-    }
-    for k, v in (image_cfg.params or {}).items():
-        if v is not None:
-            body[k] = v
-    if seed is not None:
-        body["seed"] = seed
-    return body
+_PLACEHOLDER = re.compile(r"\$\{([^}]+)\}")
+_DROP = object()
+_MAX_IMAGE_BYTES = 64 * 1024 * 1024
 
 
-def generate(positive: str, negative: str, image_cfg, seed) -> "Image.Image":
-    body = _request_body(positive, negative, image_cfg, seed)
-    data = json.dumps(body).encode("utf-8")
-    headers = {"Content-Type": "application/json"}
-    if image_cfg.api_key_env:
-        key = os.environ.get(image_cfg.api_key_env)
-        if key:
-            headers["Authorization"] = f"Bearer {key}"
-    req = urllib.request.Request(image_cfg.endpoint, data=data, headers=headers, method="POST")
+def _resolve_token(token: str, variables: dict):
+    """Return (value, found) for a single ${...} token name."""
+    token = token.strip()
+    if token.startswith("env:"):
+        return os.environ.get(token[4:], ""), True
+    if token in variables:
+        return variables[token], True
+    return None, False
+
+
+def _render(template, variables):
+    """Substitute ${...} placeholders recursively.
+
+    A value that is exactly "${x}" preserves the substituted value's native type; an
+    embedded placeholder stringifies. A mapping value (or whole-value placeholder) that
+    resolves to None or an unknown name is dropped from its enclosing mapping/list.
+    """
+    if isinstance(template, dict):
+        out = {}
+        for k, v in template.items():
+            r = _render(v, variables)
+            if r is _DROP:
+                continue
+            out[k] = r
+        return out
+    if isinstance(template, list):
+        return [r for r in (_render(v, variables) for v in template) if r is not _DROP]
+    if isinstance(template, str):
+        whole = _PLACEHOLDER.fullmatch(template.strip())
+        if whole:
+            value, found = _resolve_token(whole.group(1), variables)
+            if not found or value is None:
+                return _DROP
+            return value
+
+        def repl(match):
+            value, found = _resolve_token(match.group(1), variables)
+            return "" if (not found or value is None) else str(value)
+
+        return _PLACEHOLDER.sub(repl, template)
+    return template
+
+
+def _http(method: str, url: str, headers: dict, body, timeout):
+    """Send an HTTP request; return (status, raw_bytes). Failures -> BackendUnavailable."""
+    data = json.dumps(body).encode("utf-8") if body is not None else None
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=image_cfg.timeout) as resp:
-            raw = resp.read()
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            status = getattr(resp, "status", 200)
+            raw = resp.read(_MAX_IMAGE_BYTES + 1)
+    except urllib.error.HTTPError as exc:
+        detail = ""
+        try:
+            detail = exc.read(2048).decode("utf-8", "replace")
+        except Exception:
+            pass
+        raise BackendUnavailable(f"{url} returned HTTP {exc.code}: {detail[:500]}") from exc
     except (urllib.error.URLError, OSError, TimeoutError) as exc:
-        raise BackendUnavailable(f"image backend unreachable at {image_cfg.endpoint}: {exc}") from exc
+        raise BackendUnavailable(f"image backend unreachable at {url}: {exc}") from exc
+    if len(raw) > _MAX_IMAGE_BYTES:
+        raise BackendUnavailable(f"{url} response exceeds size cap ({_MAX_IMAGE_BYTES} bytes)")
+    return status, raw
+
+
+def _extract(obj, path):
+    """Dotted/indexed lookup into parsed JSON, e.g. 'data.0.b64_json'."""
+    cur = obj
+    for part in str(path).split("."):
+        try:
+            if isinstance(cur, dict):
+                cur = cur[part]
+            elif isinstance(cur, (list, tuple)):
+                cur = cur[int(part)]
+            else:
+                raise KeyError(part)
+        except (KeyError, IndexError, ValueError, TypeError) as exc:
+            raise BackendUnavailable(
+                f"response has no value at path '{path}' (failed at '{part}')"
+            ) from exc
+    return cur
+
+
+def _auth_header(auth, variables) -> dict:
+    """Render the single auth header. If any ${env:NAME} token is unset/empty, drop it."""
+    if not auth:
+        return {}
+    for match in _PLACEHOLDER.finditer(auth.value):
+        tok = match.group(1).strip()
+        if tok.startswith("env:") and not os.environ.get(tok[4:]):
+            return {}
+    value = _render(auth.value, variables)
+    if value is _DROP or not value:
+        return {}
+    return {auth.header: value}
+
+
+def _is_base64(s: str) -> bool:
+    if len(s) < 16 or len(s) % 4 != 0:
+        return False
     try:
-        parsed = json.loads(raw)
-        b64 = parsed["data"][0]["b64_json"]
-        img = Image.open(io.BytesIO(base64.b64decode(b64)))
-        return img.convert("RGBA")
-    except (ValueError, KeyError, IndexError, TypeError) as exc:
-        raise BackendUnavailable(
-            f"image backend at {image_cfg.endpoint} returned an unusable response: {exc}"
-        ) from exc
+        base64.b64decode(s, validate=True)
+        return True
+    except Exception:
+        return False
+
+
+def _decode_b64(ref: str) -> bytes:
+    if ref.startswith("data:"):
+        ref = ref.split(",", 1)[-1]
+    try:
+        return base64.b64decode(ref, validate=True)
+    except Exception as exc:
+        raise BackendUnavailable(f"could not base64-decode image: {exc}") from exc
+
+
+def _resolve_image(ref, backend_cfg, auth: dict, variables) -> bytes:
+    if not isinstance(ref, str):
+        raise BackendUnavailable(f"image reference is not a string: {type(ref).__name__}")
+    kind = backend_cfg.response.image_kind
+    looks_b64 = ref.startswith("data:") or _is_base64(ref)
+    if kind == "base64" or (kind == "auto" and looks_b64):
+        return _decode_b64(ref)
+    url = ref
+    base = backend_cfg.response.fetch_base
+    if base and not re.match(r"^https?://", ref):
+        url = base.rstrip("/") + "/" + ref.lstrip("/")
+    if not re.match(r"^https?://", url):
+        raise BackendUnavailable(f"refusing to fetch non-http(s) image url: {url!r}")
+    _, raw = _http("GET", url, dict(auth), None, backend_cfg.timeout)
+    return raw
+
+
+def generate(positive: str, negative: str, backend_cfg, seed) -> "Image.Image":
+    gen = backend_cfg.gen_size
+    variables = {
+        "prompt": positive,
+        "negative": negative,
+        "model": backend_cfg.model,
+        "gen_size": gen,
+        "gen_width": gen,
+        "gen_height": gen,
+        "seed": seed,
+    }
+    auth = _auth_header(backend_cfg.auth, variables)
+
+    if backend_cfg.prep is not None:
+        p = backend_cfg.prep
+        headers = {"Content-Type": "application/json", **_render(p.headers, variables), **auth}
+        _, raw = _http(p.method, _render(p.url, variables), headers, _render(p.body, variables),
+                       backend_cfg.timeout)
+        try:
+            prep_json = json.loads(raw)
+        except ValueError as exc:
+            raise BackendUnavailable(f"prep request to {p.url} returned non-JSON: {exc}") from exc
+        for name, jpath in (p.capture or {}).items():
+            variables[name] = _extract(prep_json, jpath)
+
+    r = backend_cfg.request
+    headers = {"Content-Type": "application/json", **_render(r.headers, variables), **auth}
+    _, raw = _http(r.method, _render(r.url, variables), headers, _render(r.body, variables),
+                   backend_cfg.timeout)
+    try:
+        resp_json = json.loads(raw)
+    except ValueError as exc:
+        raise BackendUnavailable(f"backend at {r.url} returned non-JSON: {exc}") from exc
+
+    ref = _extract(resp_json, backend_cfg.response.image_path)
+    img_bytes = _resolve_image(ref, backend_cfg, auth, variables)
+    try:
+        return Image.open(io.BytesIO(img_bytes)).convert("RGBA")
+    except Exception as exc:
+        raise BackendUnavailable(f"backend returned undecodable image data: {exc}") from exc
