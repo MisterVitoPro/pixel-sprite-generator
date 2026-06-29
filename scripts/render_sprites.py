@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -49,6 +50,12 @@ HEX_RE = re.compile(r"^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
 TRANSPARENT_CHAR = "."
 MAX_EXTENDS_DEPTH = 16
 GRADIENT_AXES = ("x", "y", "diag", "adiag")
+
+ATLAS_APP = "pixel-sprite-generator"
+ATLAS_FORMAT = "RGBA8888"
+DEFAULT_PACK_NAME = "spritesheet"
+# An output named "<base>_f<n>" is treated as animation frame n of "<base>".
+FRAME_SUFFIX = re.compile(r"^(?P<base>.+)_f(?P<index>\d+)$")
 
 CONFIG_FILENAME = "pixel-sprite.config.json"
 DEFAULT_CONFIG = {
@@ -168,7 +175,33 @@ def is_power_of_two(n) -> bool:
     return isinstance(n, int) and not isinstance(n, bool) and n > 0 and (n & (n - 1)) == 0
 
 
-def load_shape(path: Path, size: int = DEFAULT_SIZE) -> dict:
+def resolve_dims(data: dict, default_size: int = DEFAULT_SIZE) -> tuple[int, int]:
+    """Resolve a shape's (width, height) in pixels. Raises RenderError on invalid dims.
+
+    A shape may declare its canvas as a square ``"size": N`` (shorthand) OR a rectangle
+    ``"width": W, "height": H`` (e.g. a 16x32 character), but not both. If it declares
+    neither, it inherits the project default ``default_size`` (square). Each dimension
+    must independently be a positive power of two, so 16x16, 16x32, and 32x16 are all valid.
+    """
+    has_wh = ("width" in data) or ("height" in data)
+    has_size = "size" in data
+    if has_wh and has_size:
+        raise RenderError("specify either 'size' or 'width'/'height', not both")
+    if has_wh:
+        w, h = data.get("width"), data.get("height")
+        if w is None or h is None:
+            raise RenderError("both 'width' and 'height' are required when either is given")
+    elif has_size:
+        w = h = data["size"]
+    else:
+        w = h = default_size
+    for label, val in (("width", w), ("height", h)):
+        if not is_power_of_two(val):
+            raise RenderError(f"{label} must be a positive power of two, got {val!r}")
+    return w, h
+
+
+def load_shape(path: Path, default_size: int = DEFAULT_SIZE) -> dict:
     """Read and structurally validate a shape file. Raises RenderError on any problem."""
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -178,15 +211,17 @@ def load_shape(path: Path, size: int = DEFAULT_SIZE) -> dict:
     stem = path.stem
     if data.get("id") != stem:
         raise RenderError(f"{path.name}: id '{data.get('id')}' must match filename stem '{stem}'")
-    if data.get("size") != size:
-        raise RenderError(f"{path.name}: size must be {size}, got {data.get('size')}")
+    try:
+        width, height = resolve_dims(data, default_size)
+    except RenderError as exc:
+        raise RenderError(f"{path.name}: {exc}") from exc
 
     rows = data.get("rows")
-    if not isinstance(rows, list) or len(rows) != size:
-        raise RenderError(f"{path.name}: 'rows' must be exactly {size} rows, got {len(rows) if isinstance(rows, list) else type(rows).__name__}")
+    if not isinstance(rows, list) or len(rows) != height:
+        raise RenderError(f"{path.name}: 'rows' must be exactly {height} rows, got {len(rows) if isinstance(rows, list) else type(rows).__name__}")
     for y, row in enumerate(rows):
-        if not isinstance(row, str) or len(row) != size:
-            raise RenderError(f"{path.name} row {y}: must be exactly {size} chars, got {len(row) if isinstance(row, str) else type(row).__name__}")
+        if not isinstance(row, str) or len(row) != width:
+            raise RenderError(f"{path.name} row {y}: must be exactly {width} chars, got {len(row) if isinstance(row, str) else type(row).__name__}")
 
     outputs = data.get("outputs")
     if not isinstance(outputs, dict) or not outputs:
@@ -203,10 +238,11 @@ def render_shape(shape: dict, palettes_dir: Path, size: int = DEFAULT_SIZE) -> d
     the form wherever the char is placed). A single-line extent resolves to `from`.
     """
     rows: list[str] = shape["rows"]
+    width, height = resolve_dims(shape, size)
     images: dict[str, Image.Image] = {}
     for output_name, palette_name in shape["outputs"].items():
         palette = resolve_palette(palette_name, palettes_dir)
-        img = Image.new("RGBA", (size, size), TRANSPARENT)
+        img = Image.new("RGBA", (width, height), TRANSPARENT)
         px = img.load()
         gradient_pixels: dict[str, list[tuple[int, int]]] = {}
         for y, row in enumerate(rows):
@@ -237,8 +273,13 @@ def render_shape(shape: dict, palettes_dir: Path, size: int = DEFAULT_SIZE) -> d
     return images
 
 
-def render_file(shape_path: Path, palettes_dir: Path, out_dir: Path, size: int = DEFAULT_SIZE, write: bool = True) -> list[str]:
-    """Validate + render one shape file, writing PNGs into out_dir. Returns output names."""
+def render_file(shape_path: Path, palettes_dir: Path, out_dir: Path, size: int = DEFAULT_SIZE,
+                write: bool = True, collect: Optional[dict[str, "Image.Image"]] = None) -> list[str]:
+    """Validate + render one shape file, writing PNGs into out_dir. Returns output names.
+
+    If ``collect`` is given, each rendered image is also stored into it by output name
+    (used to gather every sprite for a packed spritesheet without rendering twice).
+    """
     shape = load_shape(shape_path, size)
     images = render_shape(shape, palettes_dir, size)
     written: list[str] = []
@@ -246,6 +287,8 @@ def render_file(shape_path: Path, palettes_dir: Path, out_dir: Path, size: int =
         if write:
             out_dir.mkdir(parents=True, exist_ok=True)
             img.save(out_dir / f"{output_name}.png", format="PNG", optimize=True)
+        if collect is not None:
+            collect[output_name] = img
         written.append(output_name)
     return written
 
@@ -259,6 +302,130 @@ def validate_all(shapes_dir: Path, palettes_dir: Path, size: int = DEFAULT_SIZE)
         except RenderError as exc:
             errors.append(str(exc))
     return errors
+
+
+# --------------------------------------------------------------------------- #
+# spritesheet packing (TexturePacker / Aseprite-compatible JSON atlas)
+# --------------------------------------------------------------------------- #
+
+def _frame_tags(names: list[str]) -> list[dict]:
+    """Group contiguous ``<base>_f<n>`` frames into forward animation tags.
+
+    Names are assumed already sorted, so frames of one animation are adjacent and in
+    index order. A run of >= 2 frames sharing a base becomes one frameTag spanning the
+    frame indices it occupies (Aseprite/TexturePacker convention).
+    """
+    tags: list[dict] = []
+    i, n = 0, len(names)
+    while i < n:
+        m = FRAME_SUFFIX.match(names[i])
+        if not m:
+            i += 1
+            continue
+        base = m.group("base")
+        j = i + 1
+        while j < n:
+            mj = FRAME_SUFFIX.match(names[j])
+            if not mj or mj.group("base") != base:
+                break
+            j += 1
+        if j - i >= 2:
+            tags.append({"name": base, "from": i, "to": j - 1, "direction": "forward"})
+        i = j
+    return tags
+
+
+def _pack_layout(names: list[str], dims: dict[str, tuple[int, int]],
+                 cols: Optional[int]) -> tuple[list[tuple[str, int, int]], int, int]:
+    """Compute (name, x, y) placements + sheet size for the packed sheet.
+
+    When every sprite is the same size, lay them on a near-square grid (honoring an
+    explicit ``cols``) for a tidy uniform sheet. When sizes differ (e.g. 16x16 tiles
+    mixed with a 16x32 character), fall back to deterministic left-to-right shelf
+    packing wrapped near a square overall width.
+    """
+    if len(set(dims.values())) == 1:
+        w, h = dims[names[0]]
+        n = len(names)
+        if not cols or cols < 1:
+            cols = max(1, math.ceil(math.sqrt(n)))
+        rows = math.ceil(n / cols)
+        placements = [(name, (i % cols) * w, (i // cols) * h) for i, name in enumerate(names)]
+        return placements, cols * w, rows * h
+
+    total_area = sum(w * h for w, h in dims.values())
+    target_w = max(max(w for w, _ in dims.values()), math.ceil(math.sqrt(total_area)))
+    placements: list[tuple[str, int, int]] = []
+    x = y = shelf_h = sheet_w = 0
+    for name in names:
+        w, h = dims[name]
+        if x > 0 and x + w > target_w:
+            y += shelf_h
+            x = shelf_h = 0
+        placements.append((name, x, y))
+        x += w
+        shelf_h = max(shelf_h, h)
+        sheet_w = max(sheet_w, x)
+    return placements, sheet_w, y + shelf_h
+
+
+def build_atlas(images: dict[str, "Image.Image"], size: Optional[int] = None,
+                cols: Optional[int] = None,
+                image_name: str = f"{DEFAULT_PACK_NAME}.png") -> tuple["Image.Image", dict]:
+    """Pack sprites (any mix of sizes) into one sheet + a JSON atlas dict.
+
+    Sprites are placed in name-sorted (deterministic) order -- a uniform set goes on a
+    near-square grid (override columns with ``cols``); a mixed-size set is shelf-packed.
+    The atlas matches the TexturePacker / Aseprite JSON-hash schema (loads as-is in
+    Phaser, PixiJS, Godot, Unity), carrying each frame's true rect plus `frameTags`
+    derived from any `<base>_f<n>` frame names. ``size`` is accepted for call
+    compatibility but per-frame dimensions are read from the images themselves.
+    """
+    names = sorted(images)
+    if not names:
+        raise RenderError("no sprites to pack")
+    dims = {name: images[name].size for name in names}
+    placements, sheet_w, sheet_h = _pack_layout(names, dims, cols)
+
+    sheet = Image.new("RGBA", (sheet_w, sheet_h), TRANSPARENT)
+    frames: dict[str, dict] = {}
+    for name, x, y in placements:
+        w, h = dims[name]
+        sheet.paste(images[name], (x, y))
+        frames[name] = {
+            "frame": {"x": x, "y": y, "w": w, "h": h},
+            "rotated": False,
+            "trimmed": False,
+            "spriteSourceSize": {"x": 0, "y": 0, "w": w, "h": h},
+            "sourceSize": {"w": w, "h": h},
+            "duration": 100,
+        }
+    atlas = {
+        "frames": frames,
+        "meta": {
+            "app": ATLAS_APP,
+            "version": "1.0",
+            "image": image_name,
+            "format": ATLAS_FORMAT,
+            "size": {"w": sheet_w, "h": sheet_h},
+            "scale": "1",
+            "frameTags": _frame_tags(names),
+        },
+    }
+    return sheet, atlas
+
+
+def write_pack(images: dict[str, "Image.Image"], out_dir: Path, size: int,
+               pack_name: str = DEFAULT_PACK_NAME, cols: Optional[int] = None) -> tuple[Path, Path]:
+    """Build + write the packed sheet PNG and its JSON atlas into out_dir. Returns both paths."""
+    image_name = f"{pack_name}.png"
+    sheet, atlas = build_atlas(images, size, cols, image_name)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    png_path = out_dir / image_name
+    json_path = out_dir / f"{pack_name}.json"
+    sheet.save(png_path, format="PNG", optimize=True)
+    json_path.write_text(json.dumps(atlas, indent=2) + "\n", encoding="utf-8")
+    return png_path, json_path
 
 
 # --------------------------------------------------------------------------- #
@@ -351,6 +518,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--shapes-dir", help="override shapes directory")
     parser.add_argument("--palettes-dir", help="override palettes directory")
     parser.add_argument("--out-dir", help="override output directory")
+    parser.add_argument("--pack", action="store_true",
+                        help="also pack the rendered sprites into one spritesheet PNG + a "
+                             "TexturePacker/Aseprite-compatible JSON atlas")
+    parser.add_argument("--pack-name", default=DEFAULT_PACK_NAME,
+                        help=f"basename for the packed sheet + atlas (default: {DEFAULT_PACK_NAME})")
+    parser.add_argument("--pack-cols", type=int, default=None,
+                        help="columns in the packed sheet (default: near-square)")
     args = parser.parse_args(argv)
 
     project_root = Path.cwd()
@@ -397,12 +571,17 @@ def main(argv: Optional[list[str]] = None) -> int:
             return 0
 
     total = 0
+    collected: Optional[dict[str, "Image.Image"]] = {} if args.pack else None
     try:
         for shape_path in shape_paths:
-            written = render_file(shape_path, cfg.palettes_dir, cfg.out_dir, cfg.size)
+            written = render_file(shape_path, cfg.palettes_dir, cfg.out_dir, cfg.size, collect=collected)
             for name in written:
                 print(f"  rendered {name}.png")
             total += len(written)
+        if args.pack and collected:
+            png_path, json_path = write_pack(collected, cfg.out_dir, cfg.size,
+                                             args.pack_name, args.pack_cols)
+            print(f"  packed {len(collected)} frame(s) -> {png_path.name} + {json_path.name}")
     except RenderError as exc:
         sys.stderr.write(f"Error: {exc}\n")
         return 1

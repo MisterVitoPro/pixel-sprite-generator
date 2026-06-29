@@ -155,10 +155,50 @@ def test_undefined_char_raises(art):
         rs.render_file(art["shapes"] / "x.json", art["palettes"], art["out"])
 
 
-def test_size_not_16_raises(art):
-    shape = {"id": "x", "size": 32, "outputs": {"x": "iron"}, "rows": diagonal_rows()}
+def test_shape_declares_own_square_size(art):
+    # a shape may declare its own (power-of-two) square size different from the project default
+    shape = {"id": "big", "size": 32, "outputs": {"big": "iron"}, "rows": _diagonal_rows_n(32)}
+    write_json(art["shapes"] / "big.json", shape)
+    rs.render_file(art["shapes"] / "big.json", art["palettes"], art["out"], size=16)
+    with Image.open(art["out"] / "big.png") as img:
+        assert img.size == (32, 32)
+
+
+def test_non_square_width_height(art):
+    rows = ["." * 16 for _ in range(32)]
+    rows[0] = "B" + "." * 15
+    rows[31] = "." * 15 + "B"
+    shape = {"id": "tall", "width": 16, "height": 32, "outputs": {"tall": "iron"}, "rows": rows}
+    write_json(art["shapes"] / "tall.json", shape)
+    rs.render_file(art["shapes"] / "tall.json", art["palettes"], art["out"], size=16)
+    with Image.open(art["out"] / "tall.png") as img:
+        assert img.size == (16, 32)
+        assert img.getpixel((0, 0)) == (0xC8, 0xC8, 0xC8, 255)
+        assert img.getpixel((15, 31)) == (0xC8, 0xC8, 0xC8, 255)
+
+
+def test_non_power_of_two_dimension_raises(art):
+    shape = {"id": "x", "width": 16, "height": 20, "outputs": {"x": "iron"},
+             "rows": ["." * 16 for _ in range(20)]}
     write_json(art["shapes"] / "x.json", shape)
-    with pytest.raises(rs.RenderError, match="size"):
+    with pytest.raises(rs.RenderError, match="power of two"):
+        rs.render_file(art["shapes"] / "x.json", art["palettes"], art["out"])
+
+
+def test_size_and_width_height_conflict_raises(art):
+    shape = {"id": "x", "size": 16, "width": 16, "height": 32, "outputs": {"x": "iron"},
+             "rows": ["." * 16 for _ in range(16)]}
+    write_json(art["shapes"] / "x.json", shape)
+    with pytest.raises(rs.RenderError, match="not both"):
+        rs.render_file(art["shapes"] / "x.json", art["palettes"], art["out"])
+
+
+def test_non_square_wrong_row_length_raises(art):
+    rows = ["." * 16 for _ in range(32)]
+    rows[5] = "." * 8  # too short for width 16
+    shape = {"id": "x", "width": 16, "height": 32, "outputs": {"x": "iron"}, "rows": rows}
+    write_json(art["shapes"] / "x.json", shape)
+    with pytest.raises(rs.RenderError, match="row 5"):
         rs.render_file(art["shapes"] / "x.json", art["palettes"], art["out"])
 
 
@@ -441,6 +481,111 @@ def test_config_not_object_rejected(tmp_path):
     (tmp_path / "pixel-sprite.config.json").write_text("[1, 2]", encoding="utf-8")
     with pytest.raises(rs.ConfigError, match="object"):
         rs.load_config(tmp_path, None, _no_overrides())
+
+
+# --------------------------------------------------------------------------- #
+# spritesheet packing -> TexturePacker/Aseprite-compatible JSON atlas
+# --------------------------------------------------------------------------- #
+
+def _solid_image(color: tuple[int, int, int, int], size: int = 16) -> Image.Image:
+    img = Image.new("RGBA", (size, size), color)
+    return img
+
+
+def test_build_atlas_grid_layout_and_meta():
+    red = (255, 0, 0, 255)
+    grn = (0, 255, 0, 255)
+    blu = (0, 0, 255, 255)
+    images = {"barrel": _solid_image(red), "apple": _solid_image(grn), "coin": _solid_image(blu)}
+    sheet, atlas = rs.build_atlas(images, size=16, image_name="sheet.png")
+    # 3 frames -> near-square grid is 2 cols x 2 rows -> 32x32 sheet
+    assert sheet.size == (32, 32)
+    assert atlas["meta"]["size"] == {"w": 32, "h": 32}
+    assert atlas["meta"]["image"] == "sheet.png"
+    assert atlas["meta"]["format"] == "RGBA8888"
+    assert set(atlas["frames"]) == {"apple", "barrel", "coin"}
+    # name-sorted order: apple(0,0) barrel(16,0) coin(0,16)
+    assert atlas["frames"]["apple"]["frame"] == {"x": 0, "y": 0, "w": 16, "h": 16}
+    assert atlas["frames"]["barrel"]["frame"] == {"x": 16, "y": 0, "w": 16, "h": 16}
+    assert atlas["frames"]["coin"]["frame"] == {"x": 0, "y": 16, "w": 16, "h": 16}
+    # pixels landed where the atlas says they did
+    assert sheet.getpixel((0, 0)) == grn      # apple
+    assert sheet.getpixel((16, 0)) == red      # barrel
+    assert sheet.getpixel((0, 16)) == blu      # coin
+
+
+def test_build_atlas_explicit_cols():
+    images = {f"s{i}": _solid_image((i, i, i, 255)) for i in range(4)}
+    sheet, atlas = rs.build_atlas(images, size=16, cols=4)
+    assert sheet.size == (64, 16)  # one row of four
+    assert atlas["frames"]["s3"]["frame"] == {"x": 48, "y": 0, "w": 16, "h": 16}
+
+
+def test_build_atlas_mixed_sizes_shelf_packs():
+    # a 16x16 tile next to a 16x32 character -> shelf packing, frames keep true sizes
+    images = {"tile": _solid_image((1, 1, 1, 255), 16),
+              "hero": Image.new("RGBA", (16, 32), (2, 2, 2, 255))}
+    sheet, atlas = rs.build_atlas(images)
+    assert atlas["frames"]["hero"]["frame"]["w"] == 16
+    assert atlas["frames"]["hero"]["frame"]["h"] == 32
+    assert atlas["frames"]["tile"]["frame"]["w"] == 16
+    assert atlas["frames"]["tile"]["frame"]["h"] == 16
+    assert sheet.size[1] >= 32  # tall enough for the character
+    assert atlas["meta"]["size"] == {"w": sheet.size[0], "h": sheet.size[1]}
+
+
+def test_build_atlas_frametags_from_fN_suffix():
+    images = {f"walk_f{i}": _solid_image((0, 0, 0, 255)) for i in range(4)}
+    images["idle"] = _solid_image((1, 1, 1, 255))
+    _, atlas = rs.build_atlas(images, size=16, cols=8)
+    tags = atlas["meta"]["frameTags"]
+    assert len(tags) == 1
+    # sorted order: idle(0), walk_f0(1)..walk_f3(4)
+    assert tags[0] == {"name": "walk", "from": 1, "to": 4, "direction": "forward"}
+
+
+def test_build_atlas_single_frame_no_tags():
+    _, atlas = rs.build_atlas({"lonely_f0": _solid_image((0, 0, 0, 255))}, size=16)
+    assert atlas["meta"]["frameTags"] == []  # one frame is not an animation
+
+
+def test_build_atlas_empty_raises():
+    with pytest.raises(rs.RenderError, match="no sprites"):
+        rs.build_atlas({}, size=16)
+
+
+def test_write_pack_writes_png_and_json(tmp_path):
+    images = {"a": _solid_image((9, 9, 9, 255)), "b": _solid_image((8, 8, 8, 255))}
+    png, js = rs.write_pack(images, tmp_path, size=16, pack_name="atlas")
+    assert png == tmp_path / "atlas.png"
+    assert js == tmp_path / "atlas.json"
+    assert png.exists() and js.exists()
+    data = json.loads(js.read_text(encoding="utf-8"))
+    assert data["meta"]["image"] == "atlas.png"
+    assert set(data["frames"]) == {"a", "b"}
+
+
+def test_main_pack_emits_sheet_and_atlas(tmp_path, monkeypatch):
+    proj = _project(tmp_path)
+    # add a second shape so the pack has > 1 frame
+    write_json(proj / "art" / "shapes" / "other.json",
+               {"id": "other", "size": 16, "outputs": {"other": "iron"},
+                "rows": _diagonal_rows_n(16)})
+    monkeypatch.chdir(proj)
+    rc = rs.main(["--pack"])
+    assert rc == 0
+    assert (proj / "out" / "thing.png").exists()        # individuals still written
+    assert (proj / "out" / "spritesheet.png").exists()
+    atlas = json.loads((proj / "out" / "spritesheet.json").read_text(encoding="utf-8"))
+    assert set(atlas["frames"]) == {"other", "thing"}
+
+
+def test_main_without_pack_writes_no_sheet(tmp_path, monkeypatch):
+    proj = _project(tmp_path)
+    monkeypatch.chdir(proj)
+    rs.main([])
+    assert not (proj / "out" / "spritesheet.png").exists()
+    assert not (proj / "out" / "spritesheet.json").exists()
 
 
 # --------------------------------------------------------------------------- #

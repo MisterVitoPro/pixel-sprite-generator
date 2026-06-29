@@ -19,8 +19,15 @@ pipeline -- there is NO external image model and NO manual downscale/chroma-key 
 ```
 
 You author a JSON pixel-grid by hand; the Python converter turns it into the final PNG(s).
-Every output is exactly `size` x `size` (a power of two from the project config; default 16) --
-the converter hard-fails on anything else.
+By default an output is `size` x `size` (a square power of two from the project config; default
+16) -- but a shape may declare its own non-square canvas with `width` + `height` (each an
+independent power of two), e.g. a 16x32 character or 32x16 banner. The converter hard-fails on
+any grid whose rows do not match its resolved dimensions.
+
+**Pick the size to fit the subject, like real games do.** Tiles, props, and item icons are
+16x16; a standing character needs vertical room and should be **16x32** (a person crammed into
+16x16 reads as squished -- this is exactly why Stardew Valley uses 16x16 tiles but 16x32 NPCs).
+Bump to 32x32 for large/detailed subjects.
 
 The script is bundled with this plugin. Invoke it from the project root as:
 `python "${CLAUDE_PLUGIN_ROOT}/scripts/render_sprites.py" [flags]`
@@ -70,15 +77,24 @@ is the committed shape JSON plus the rendered PNG(s).
 }
 ```
 
+A non-square shape uses `width`/`height` instead of `size`:
+
+```json
+{ "id": "hero", "width": 16, "height": 32, "outputs": { "hero": "hero" }, "rows": ["...32 rows of 16 chars..."] }
+```
+
 - `id` MUST equal the filename stem.
-- `size` MUST equal the configured size.
+- Dimensions: give EITHER `size` (square shorthand) OR `width` + `height` (rectangle), never
+  both. Omit all three to inherit the project default `size`. Each dimension must be a power of
+  two; they need not match the project default.
 - `outputs` maps each output PNG basename (no extension) to a palette name. One shape can
   produce several PNGs (e.g. material/rarity variants) from one grid.
-- `rows` MUST be exactly `size` strings of exactly `size` chars. `.` is transparent.
+- `rows` MUST be exactly `height` strings of exactly `width` chars. `.` is transparent.
 
 The converter hard-fails (no silent fixes) on: wrong row count/length, a char not in the
-resolved palette, a `size` mismatch, an `id` that does not match the filename, a missing
-palette, or an `extends` cycle. Run `render_sprites.py --check` to validate without writing.
+resolved palette, a non-power-of-two dimension, specifying both `size` and `width`/`height`, an
+`id` that does not match the filename, a missing palette, or an `extends` cycle. Run
+`render_sprites.py --check` to validate without writing.
 
 ## Semantic char convention (recommended starter vocabulary)
 
@@ -149,6 +165,28 @@ LOOK at the upscaled PNG and apply these:
 For "all the gems" / "every rarity variant", author each shape file, then render all at once:
 `python "${CLAUDE_PLUGIN_ROOT}/scripts/render_sprites.py"` (no `--only`). Each shape's `outputs`
 produces its own PNG(s).
+
+## Packing a spritesheet + atlas (`--pack`)
+
+Real 2D games (Stardew Valley, Terraria, Cave Story, ...) never ship one PNG per sprite at
+runtime -- they ship a single packed **spritesheet** plus a **metadata atlas** that maps named
+regions to rects (and animations to frame ranges). Add `--pack` to also emit that alongside the
+individual PNGs:
+
+```
+python "${CLAUDE_PLUGIN_ROOT}/scripts/render_sprites.py" --pack
+```
+
+This writes `<out_dir>/spritesheet.png` (every rendered sprite laid out on a name-sorted,
+near-square grid of `size` x `size` cells) and `<out_dir>/spritesheet.json` -- a
+**TexturePacker / Aseprite JSON-hash atlas** that loads as-is in Phaser, PixiJS, Godot, and
+Unity. Flags: `--pack-name <basename>` (default `spritesheet`) and `--pack-cols <n>` (default
+near-square). Use `--pack` WITHOUT `--only` so the sheet contains the whole set.
+
+**Animations:** name a shape's outputs `<base>_f0`, `<base>_f1`, ... and the packer groups those
+contiguous frames into an Aseprite `frameTags` entry (`{name, from, to, direction}`) automatically
+-- so a multi-frame walk cycle authored as one grid per frame becomes a named animation in the
+atlas with no extra config.
 
 ## Common mistakes to avoid
 
