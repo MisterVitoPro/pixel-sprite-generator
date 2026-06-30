@@ -1,17 +1,30 @@
 {
   "extends": null,
   "colors": {
-    "B": "#7DF2EE",
-    "b": "#4DD2D6",
-    "s": "#2A8FA6",
-    "W": "#9A724A",
-    "w": "#7C5A3A",
-    "k": "#3E2A18",
-    "f": "#6E6E6E",
-    "p": "#6E6E6E",
-    "a": "#7DF2EE",
-    "o": "#18414A",
-    "g": { "from": "#7DF2EE", "to": "#2A8FA6", "axis": "diag" },
-    "v": { "from": "#7DF2EE", "to": "#2A8FA6", "axis": "y" }
+    "o": "#15151a",
+    "P": "#1e5c6e",
+    "B": {
+      "stops": [
+        {
+          "pos": 0.0,
+          "color": "#1e5c6e"
+        },
+        {
+          "pos": 0.5,
+          "color": "#37a4b8"
+        },
+        {
+          "pos": 1.0,
+          "color": "#7fe6e6"
+        }
+      ],
+      "axis": "adiag"
+    },
+    "e": "#7fe6e6",
+    "x": "#ecffff",
+    "w": "#6e4327",
+    "W": "#9c6b3f",
+    "c": "#43271a",
+    "k": "#2a1a14"
   }
 }

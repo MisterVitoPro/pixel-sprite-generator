@@ -1,0 +1,25 @@
+{
+  "id": "tree16",
+  "size": 16,
+  "outputs": {
+    "tree16": "tree"
+  },
+  "rows": [
+    "................",
+    "......oooo......",
+    "....oLLggo......",
+    "...oLgggddo.....",
+    "...oLggggddo....",
+    "...oggLgggdo....",
+    "...ogggggddo....",
+    "...ooggggdo.....",
+    "...ooggddoo.....",
+    ".....ooWcoo.....",
+    "......oWco......",
+    "......oWco......",
+    ".....oWWco......",
+    ".....oWWcco.....",
+    "....ooooooo.....",
+    "................"
+  ]
+}

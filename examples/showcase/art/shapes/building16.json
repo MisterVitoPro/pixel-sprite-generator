@@ -1,0 +1,25 @@
+{
+  "id": "building16",
+  "size": 16,
+  "outputs": {
+    "building16": "building"
+  },
+  "rows": [
+    "................",
+    ".......oo.......",
+    ".....ooRRoo.....",
+    "....ooRRRRoo....",
+    "...orrrrrrro....",
+    "...ovvvvvvvo....",
+    "...oWwfGfwWo....",
+    "...oWwfGfwWo....",
+    "...oWwwwwwWo....",
+    "...oWwofowWo....",
+    "...oWwodowWo....",
+    "...oWwodowqo....",
+    "...osssssso.....",
+    "...otStStSto....",
+    "...ooooooooo....",
+    "................"
+  ]
+}

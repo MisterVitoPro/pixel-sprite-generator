@@ -1,0 +1,27 @@
+{
+  "id": "battleaxe16",
+  "size": 16,
+  "outputs": {
+    "battleaxe16": "iron",
+    "battleaxe16_diamond": "diamond",
+    "battleaxe16_netherite": "netherite"
+  },
+  "rows": [
+    "................",
+    "......oWco......",
+    ".....ooWcoo.....",
+    "....oeBWcBeo....",
+    "...oeBBWcBBeo...",
+    "...oeBBWcBBeo...",
+    "...oeBBWcBBeo...",
+    "...ooeBWcBeoo...",
+    ".....ooWcoo.....",
+    "......oWco......",
+    "......okco......",
+    "......oWco......",
+    "......oWco......",
+    "......oWco......",
+    "......ooo.......",
+    "................"
+  ]
+}

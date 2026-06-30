@@ -21,10 +21,73 @@
       },
       "duration": 100
     },
-    "battleaxe_diamond": {
+    "battleaxe16": {
       "frame": {
         "x": 32,
         "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "duration": 100
+    },
+    "battleaxe16_diamond": {
+      "frame": {
+        "x": 48,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "duration": 100
+    },
+    "battleaxe16_netherite": {
+      "frame": {
+        "x": 64,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "duration": 100
+    },
+    "battleaxe_diamond": {
+      "frame": {
+        "x": 0,
+        "y": 32,
         "w": 32,
         "h": 32
       },
@@ -44,8 +107,8 @@
     },
     "battleaxe_netherite": {
       "frame": {
-        "x": 64,
-        "y": 0,
+        "x": 32,
+        "y": 32,
         "w": 32,
         "h": 32
       },
@@ -66,7 +129,7 @@
     "building": {
       "frame": {
         "x": 0,
-        "y": 32,
+        "y": 64,
         "w": 32,
         "h": 32
       },
@@ -81,13 +144,34 @@
       "sourceSize": {
         "w": 32,
         "h": 32
+      },
+      "duration": 100
+    },
+    "building16": {
+      "frame": {
+        "x": 32,
+        "y": 64,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
       },
       "duration": 100
     },
     "character": {
       "frame": {
-        "x": 32,
-        "y": 32,
+        "x": 48,
+        "y": 64,
         "w": 32,
         "h": 32
       },
@@ -105,10 +189,31 @@
       },
       "duration": 100
     },
+    "character16": {
+      "frame": {
+        "x": 0,
+        "y": 96,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "duration": 100
+    },
     "tree": {
       "frame": {
-        "x": 64,
-        "y": 32,
+        "x": 16,
+        "y": 96,
         "w": 32,
         "h": 32
       },
@@ -123,6 +228,27 @@
       "sourceSize": {
         "w": 32,
         "h": 32
+      },
+      "duration": 100
+    },
+    "tree16": {
+      "frame": {
+        "x": 48,
+        "y": 96,
+        "w": 16,
+        "h": 16
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
       },
       "duration": 100
     }
@@ -133,8 +259,8 @@
     "image": "spritesheet.png",
     "format": "RGBA8888",
     "size": {
-      "w": 96,
-      "h": 64
+      "w": 80,
+      "h": 128
     },
     "scale": "1",
     "frameTags": []

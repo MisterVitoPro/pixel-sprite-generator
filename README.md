@@ -203,20 +203,31 @@ Force the grid renderer for the entire run with `--mode grid`.
 
 ## Showcase
 
-Every sprite below is **32x32** and was rendered with `--mode grid` from a hand-authored JSON
-grid -- the deterministic JSON-data path, no external image model. The showcase config also
-wires in the **SwarmUI** backend, so the same four subjects can be regenerated through the
-image model with `--mode image` once a SwarmUI server is running. The shape and palette sources
-live in [`examples/showcase/`](examples/showcase) (previews are nearest-neighbor upscales of the
-real PNGs).
+Every sprite below was rendered with `--mode grid` from a hand-authored JSON grid -- the
+deterministic JSON-data path, no external image model. The four subjects are authored at **both
+32x32 and 16x16**, applying small-sprite craft from acclaimed pixel art: a single top-left light
+source, **hue-shifted color ramps** (shadows cooler/desaturated, mids most saturated, lights
+warmer), silhouette-first readability, selective outlining, a lobed (clustered) tree canopy, and
+dithered wall texture. The showcase config also wires in the **SwarmUI** backend, so the same
+subjects can be regenerated through the image model with `--mode image` once a SwarmUI server is
+running. Sources live in [`examples/showcase/`](examples/showcase) (previews are nearest-neighbor
+upscales of the real PNGs).
 
-| Character | Weapon | Tree | Building |
+**32x32:**
+
+| Character | Battleaxe | Tree | Building |
 |:---:|:---:|:---:|:---:|
 | ![character](examples/showcase/preview/character.png) | ![battleaxe](examples/showcase/preview/battleaxe.png) | ![tree](examples/showcase/preview/tree.png) | ![building](examples/showcase/preview/building.png) |
-| character | battleaxe | tree | building |
+
+**16x16** (same subjects, tightened to the classic small-sprite constraint):
+
+| Character | Battleaxe | Tree | Building |
+|:---:|:---:|:---:|:---:|
+| ![character16](examples/showcase/preview/character16.png) | ![battleaxe16](examples/showcase/preview/battleaxe16.png) | ![tree16](examples/showcase/preview/tree16.png) | ![building16](examples/showcase/preview/building16.png) |
 
 **One grid, many materials.** A single shape's `outputs` map can name several palettes, so the
-battleaxe renders straight to iron, diamond, and netherite from the *same* grid -- no redrawing:
+battleaxe renders straight to iron, diamond, and netherite from the *same* grid -- no redrawing.
+Each material is a hue-shifted 4-stop ramp (deep shadow, mid, light, specular):
 
 | iron | diamond | netherite |
 |:---:|:---:|:---:|
@@ -248,21 +259,21 @@ python "${CLAUDE_PLUGIN_ROOT}/scripts/render_sprites.py" --pack
 ```
 
 The showcase set packs into one `spritesheet.png` plus a `spritesheet.json` **TexturePacker /
-Aseprite-compatible atlas** that loads as-is in Phaser, PixiJS, Godot, and Unity. The six
-uniform 32x32 frames (the battleaxe in three materials, plus character, tree, and building) go
-on a tidy grid, and every frame records its true rect:
+Aseprite-compatible atlas** that loads as-is in Phaser, PixiJS, Godot, and Unity. The twelve
+frames mix sizes (32x32 subjects, the battleaxe in three materials, plus their 16x16 variants),
+so they are deterministically shelf-packed and every frame records its true rect:
 
 ![packed spritesheet](examples/showcase/preview/spritesheet.png)
 
 ```json
 {
   "frames": {
-    "battleaxe": { "frame": {"x": 0, "y": 0, "w": 32, "h": 32}, "sourceSize": {"w": 32, "h": 32}, "duration": 100 },
-    "building":  { "frame": {"x": 0, "y": 32, "w": 32, "h": 32}, "sourceSize": {"w": 32, "h": 32}, "duration": 100 },
-    "character": { "frame": {"x": 32, "y": 32, "w": 32, "h": 32}, "sourceSize": {"w": 32, "h": 32}, "duration": 100 }
+    "battleaxe":   { "frame": {"x": 0,  "y": 0,  "w": 32, "h": 32}, "sourceSize": {"w": 32, "h": 32}, "duration": 100 },
+    "battleaxe16": { "frame": {"x": 32, "y": 0,  "w": 16, "h": 16}, "sourceSize": {"w": 16, "h": 16}, "duration": 100 },
+    "character":   { "frame": {"x": 48, "y": 64, "w": 32, "h": 32}, "sourceSize": {"w": 32, "h": 32}, "duration": 100 }
   },
   "meta": { "app": "pixel-sprite-generator", "image": "spritesheet.png",
-            "format": "RGBA8888", "size": {"w": 96, "h": 64}, "frameTags": [] }
+            "format": "RGBA8888", "size": {"w": 80, "h": 128}, "frameTags": [] }
 }
 ```
 

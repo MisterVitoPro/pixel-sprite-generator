@@ -1,0 +1,25 @@
+{
+  "id": "character16",
+  "size": 16,
+  "outputs": {
+    "character16": "character"
+  },
+  "rows": [
+    "................",
+    "......oooo......",
+    ".....oHhhho.....",
+    ".....oHhkkho....",
+    ".....ohkekeo....",
+    ".....ohkkkjo....",
+    ".....oojkkjo....",
+    ".....otTttdo....",
+    "....kTttddk.....",
+    "....okTtddo.....",
+    ".....obbubo.....",
+    ".....oppppo.....",
+    ".....opPpqo.....",
+    "....opo.opo.....",
+    "....oso.oso.....",
+    "....oo...oo....."
+  ]
+}
