@@ -201,53 +201,6 @@ Force the grid renderer for the entire run with `--mode grid`.
 - Python 3
 - Pillow and PyYAML: `pip install Pillow PyYAML`
 
-## Showcase
-
-Every sprite below was rendered with `--mode grid` from a hand-authored JSON grid -- the
-deterministic JSON-data path, no external image model. The four subjects are authored at **both
-32x32 and 16x16**, applying small-sprite craft from acclaimed pixel art: a single top-left light
-source, **hue-shifted color ramps** (shadows cooler/desaturated, mids most saturated, lights
-warmer), silhouette-first readability, selective outlining, a lobed (clustered) tree canopy, and
-dithered wall texture. The showcase config also wires in the **SwarmUI** backend, so the same
-subjects can be regenerated through the image model with `--mode image` once a SwarmUI server is
-running. Sources live in [`examples/showcase/`](examples/showcase) (previews are nearest-neighbor
-upscales of the real PNGs).
-
-**32x32:**
-
-| Character | Battleaxe | Tree | Building |
-|:---:|:---:|:---:|:---:|
-| ![character](examples/showcase/preview/character.png) | ![battleaxe](examples/showcase/preview/battleaxe.png) | ![tree](examples/showcase/preview/tree.png) | ![building](examples/showcase/preview/building.png) |
-
-**16x16** (same subjects, tightened to the classic small-sprite constraint):
-
-| Character | Battleaxe | Tree | Building |
-|:---:|:---:|:---:|:---:|
-| ![character16](examples/showcase/preview/character16.png) | ![battleaxe16](examples/showcase/preview/battleaxe16.png) | ![tree16](examples/showcase/preview/tree16.png) | ![building16](examples/showcase/preview/building16.png) |
-
-**One grid, many materials.** A single shape's `outputs` map can name several palettes, so the
-battleaxe renders straight to iron, diamond, and netherite from the *same* grid -- no redrawing.
-Each material is a hue-shifted 4-stop ramp (deep shadow, mid, light, specular):
-
-| iron | diamond | netherite |
-|:---:|:---:|:---:|
-| ![iron](examples/showcase/preview/battleaxe.png) | ![diamond](examples/showcase/preview/battleaxe_diamond.png) | ![netherite](examples/showcase/preview/battleaxe_netherite.png) |
-
-Reproduce them from the repo root with:
-
-```sh
-cd examples/showcase
-python "${CLAUDE_PLUGIN_ROOT}/scripts/render_sprites.py" --mode grid
-```
-
-To regenerate the same set through the SwarmUI image model instead (server running on
-`127.0.0.1:7801`), swap the path:
-
-```sh
-cd examples/showcase
-python "${CLAUDE_PLUGIN_ROOT}/scripts/render_sprites.py" --mode image
-```
-
 ## Spritesheet + atlas packing (`--pack`)
 
 Real 2D games (Stardew Valley, Terraria, Cave Story) never ship one PNG per sprite -- they ship a
@@ -258,12 +211,10 @@ single packed **spritesheet** plus a **metadata atlas** mapping named regions to
 python "${CLAUDE_PLUGIN_ROOT}/scripts/render_sprites.py" --pack
 ```
 
-The showcase set packs into one `spritesheet.png` plus a `spritesheet.json` **TexturePacker /
-Aseprite-compatible atlas** that loads as-is in Phaser, PixiJS, Godot, and Unity. The twelve
-frames mix sizes (32x32 subjects, the battleaxe in three materials, plus their 16x16 variants),
-so they are deterministically shelf-packed and every frame records its true rect:
-
-![packed spritesheet](examples/showcase/preview/spritesheet.png)
+The renderer packs every rendered PNG into one `spritesheet.png` plus a `spritesheet.json`
+**TexturePacker / Aseprite-compatible atlas** that loads as-is in Phaser, PixiJS, Godot, and
+Unity. Uniform frames go on a tidy grid; mixed sizes are deterministically shelf-packed, and
+every frame records its true rect:
 
 ```json
 {
