@@ -1,0 +1,20 @@
+# Automatic1111 / Forge / SD.Next txt2img API
+backend:
+  gen_size: 1024
+  timeout: 180
+  request:
+    method: POST
+    url: "http://127.0.0.1:7860/sdapi/v1/txt2img"
+    headers: { Content-Type: application/json }
+    body:
+      prompt: "${prompt}"
+      negative_prompt: "${negative}"
+      width: ${gen_width}
+      height: ${gen_height}
+      steps: 30
+      cfg_scale: 7
+      sampler_name: "Euler a"
+      seed: ${seed}
+  response:
+    image_path: "images.0"
+    image_kind: base64

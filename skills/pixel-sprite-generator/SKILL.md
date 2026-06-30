@@ -8,9 +8,9 @@ description: Use when generating a square pixel-art sprite/icon/texture for a 2D
 ## Overview
 
 This skill produces square RGBA PNG sprites through an image-generation-first pipeline: it
-calls a local OpenAI-compatible image model and post-processes the result into a small pixel-art
-PNG. If the backend is unreachable it exits with code 3 and you stop to ask the user about the
-deterministic grid fallback.
+calls the configured backend and post-processes the result into a small pixel-art PNG. If the
+backend is unreachable it exits with code 3 and you stop to ask the user about the deterministic
+grid fallback.
 
 ```
   you author                            scripts/render_sprites.py
@@ -37,11 +37,14 @@ sprites_dir: art/sprites
 shapes_dir: art/shapes
 palettes_dir: art/palettes
 out_dir: assets/sprites
+backend: openai  # or: a1111, swarmui, or a custom backend: block
 ```
 
-CLI flags (`--size`, `--sprites-dir`, `--shapes-dir`, `--palettes-dir`, `--out-dir`,
-`--config`) override the file per run. If a project has no config yet, run
-`/pixel-sprite-generator:init` to scaffold the config, directories, and a worked example.
+The `backend:` field specifies the image generation backend. Use a preset name (copy from
+`templates/backends/`) or paste a full backend block. CLI flags (`--size`, `--sprites-dir`,
+`--shapes-dir`, `--palettes-dir`, `--out-dir`, `--config`) override the file per run. If a
+project has no config yet, run `/pixel-sprite-generator:init` to scaffold the config,
+directories, and a worked example.
 
 ## The workflow (follow every time)
 
@@ -205,6 +208,32 @@ char's cells:
 `axis` is one of: `x` (left->right), `y` (top->bottom), `diag` (top-left->bottom-right),
 `adiag` (bottom-left->top-right). `null` is not allowed inside a gradient -- use `.` for
 transparency. Reach for gradients on wide forms; keep flat `B`/`b`/`s` on thin 2px shapes.
+
+For hue-shifted ramps (shadows cooler/desaturated, mids most saturated, lights warmer -- the key
+small-sprite color rule), use a **multi-stop** gradient instead of the 2-stop `from`/`to`. A plain
+2-endpoint blend muddies the mid; an explicit mid stop lets the hue rotate through it:
+
+```json
+"g": { "stops": [ {"pos": 0.0, "color": "#173d2f"},
+                  {"pos": 0.5, "color": "#2f6b3e"},
+                  {"pos": 1.0, "color": "#63c74d"} ], "axis": "adiag" }
+```
+
+`pos` runs 0..1 along the axis; stops are sampled piecewise-linearly. The 2-stop `from`/`to` form
+is just the n=2 case and still works.
+
+#### Dither (2-color stipple)
+
+A char's value may be an ordered (Bayer) dither that stipples two close tones, giving a textured
+surface (brick, stucco, leaf clusters) without enlarging the palette. Best on larger masses
+(32px+); at 16px it tends to read as noise.
+
+```json
+"w": { "dither": { "a": "#cdb488", "b": "#bb9c6d", "matrix": "bayer4", "ratio": 0.6 } }
+```
+
+`a`/`b` are the two hex tones, `matrix` is `bayer2` or `bayer4`, and `ratio` (0..1, default 0.5)
+is the fraction of cells taking color `a`.
 
 ### Forcing grid mode
 

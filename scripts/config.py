@@ -17,6 +17,7 @@ CONFIG_FILENAME = "pixel-sprite.config.yaml"
 MODES = ("auto", "image", "grid")
 DOWNSCALE = ("nearest", "box", "lanczos")
 BG_METHODS = ("chroma", "alpha_threshold", "none")
+IMAGE_KINDS = ("base64", "url", "auto")
 
 DEFAULTS = {
     "size": 16,
@@ -25,13 +26,23 @@ DEFAULTS = {
     "shapes_dir": "art/shapes",
     "palettes_dir": "art/palettes",
     "out_dir": "assets/sprites",
-    "image": {
-        "endpoint": "http://localhost:8080/v1/images/generations",
-        "model": "sd-pixel",
-        "api_key_env": None,
-        "timeout": 120,
+    "backend": {
+        "model": None,
         "gen_size": 512,
-        "params": {"steps": 30, "cfg_scale": 7, "sampler": "euler_a", "seed": None},
+        "timeout": 120,
+        "prep": None,
+        "request": {
+            "method": "POST",
+            "url": None,
+            "headers": {},
+            "body": {},
+        },
+        "response": {
+            "image_path": None,
+            "image_kind": "auto",
+            "fetch_base": None,
+        },
+        "auth": None,
     },
     "prompt": {
         "prefix": "pixel art sprite of",
@@ -46,8 +57,41 @@ DEFAULTS = {
     },
     "pack": {"enabled": False, "name": "spritesheet"},
 }
-# sections whose nested keys are validated strictly (params is free-form)
-STRICT_SECTIONS = {"image", "prompt", "postprocess", "pack"}
+
+# top-level sections whose immediate keys are validated strictly
+STRICT_SECTIONS = {"prompt", "postprocess", "pack"}
+# backend sub-sections whose immediate keys are validated strictly
+BACKEND_ALLOWED = {"model", "gen_size", "timeout", "prep", "request", "response", "auth"}
+PREP_ALLOWED = {"method", "url", "headers", "body", "capture"}
+REQUEST_ALLOWED = {"method", "url", "headers", "body"}
+RESPONSE_ALLOWED = {"image_path", "image_kind", "fetch_base"}
+AUTH_ALLOWED = {"header", "value"}
+
+
+def _reject_unknown(section_name, sub, allowed):
+    if isinstance(sub, dict):
+        bad = set(sub) - allowed
+        if bad:
+            raise ConfigError(f"unknown key(s) in '{section_name}': {sorted(bad)}")
+
+
+def _check_keys(data: dict) -> None:
+    unknown = set(data) - set(DEFAULTS)
+    if unknown:
+        raise ConfigError(f"unknown config key(s): {sorted(unknown)}")
+    for section in STRICT_SECTIONS:
+        sub = data.get(section)
+        if isinstance(sub, dict):
+            bad = set(sub) - set(DEFAULTS[section])
+            if bad:
+                raise ConfigError(f"unknown key(s) in '{section}': {sorted(bad)}")
+    backend = data.get("backend")
+    if isinstance(backend, dict):
+        _reject_unknown("backend", backend, BACKEND_ALLOWED)
+        _reject_unknown("backend.prep", backend.get("prep"), PREP_ALLOWED)
+        _reject_unknown("backend.request", backend.get("request"), REQUEST_ALLOWED)
+        _reject_unknown("backend.response", backend.get("response"), RESPONSE_ALLOWED)
+        _reject_unknown("backend.auth", backend.get("auth"), AUTH_ALLOWED)
 
 
 class ConfigError(Exception):
@@ -55,13 +99,44 @@ class ConfigError(Exception):
 
 
 @dataclasses.dataclass
-class ImageConfig:
-    endpoint: str
-    model: str
-    api_key_env: Optional[str]
-    timeout: int
+class RequestSpec:
+    method: str
+    url: str
+    headers: dict
+    body: object
+
+
+@dataclasses.dataclass
+class PrepSpec:
+    method: str
+    url: str
+    headers: dict
+    body: object
+    capture: dict
+
+
+@dataclasses.dataclass
+class ResponseSpec:
+    image_path: str
+    image_kind: str
+    fetch_base: Optional[str]
+
+
+@dataclasses.dataclass
+class AuthSpec:
+    header: str
+    value: str
+
+
+@dataclasses.dataclass
+class BackendConfig:
+    model: Optional[str]
     gen_size: int
-    params: dict
+    timeout: int
+    prep: Optional[PrepSpec]
+    request: RequestSpec
+    response: ResponseSpec
+    auth: Optional[AuthSpec]
 
 
 @dataclasses.dataclass
@@ -107,7 +182,7 @@ class Config:
     shapes_dir: Path
     palettes_dir: Path
     out_dir: Path
-    image: ImageConfig
+    backend: BackendConfig
     prompt: PromptConfig
     postprocess: PostprocessConfig
     pack: PackConfig
@@ -127,17 +202,48 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return out
 
 
-def _check_keys(data: dict) -> None:
-    unknown = set(data) - set(DEFAULTS)
-    if unknown:
-        raise ConfigError(f"unknown config key(s): {sorted(unknown)}")
-    for section in STRICT_SECTIONS:
-        sub = data.get(section)
-        if isinstance(sub, dict):
-            allowed = set(DEFAULTS[section])
-            bad = set(sub) - allowed
-            if bad:
-                raise ConfigError(f"unknown key(s) in '{section}': {sorted(bad)}")
+def _build_backend(merged_backend: dict) -> "BackendConfig":
+    b = merged_backend
+    req = b.get("request") or {}
+    if "url" not in req or not req.get("url"):
+        raise ConfigError("backend.request.url is required")
+    resp = b.get("response") or {}
+    if "image_path" not in resp or not resp.get("image_path"):
+        raise ConfigError("backend.response.image_path is required")
+    kind = resp.get("image_kind", "auto")
+    if kind not in IMAGE_KINDS:
+        raise ConfigError(f"backend.response.image_kind must be one of {IMAGE_KINDS}, got {kind!r}")
+    prep = None
+    if b.get("prep") is not None:
+        p = b["prep"]
+        if not p.get("url"):
+            raise ConfigError("backend.prep.url is required when prep is given")
+        prep = PrepSpec(
+            method=p.get("method", "POST"), url=p["url"],
+            headers=p.get("headers") or {}, body=p.get("body") if p.get("body") is not None else {},
+            capture=p.get("capture") or {},
+        )
+    auth = None
+    if b.get("auth") is not None:
+        a = b["auth"]
+        if not a.get("header") or not a.get("value"):
+            raise ConfigError("backend.auth requires both 'header' and 'value'")
+        auth = AuthSpec(header=a["header"], value=a["value"])
+    return BackendConfig(
+        model=b.get("model"),
+        gen_size=b.get("gen_size", 512),
+        timeout=b.get("timeout", 120),
+        prep=prep,
+        request=RequestSpec(
+            method=req.get("method", "POST"), url=req["url"],
+            headers=req.get("headers") or {},
+            body=req.get("body") if req.get("body") is not None else {},
+        ),
+        response=ResponseSpec(
+            image_path=resp["image_path"], image_kind=kind, fetch_base=resp.get("fetch_base"),
+        ),
+        auth=auth,
+    )
 
 
 def load_config(project_root: Path, config_path: Optional[Path], overrides: dict) -> Config:
@@ -186,7 +292,7 @@ def load_config(project_root: Path, config_path: Optional[Path], overrides: dict
         shapes_dir=(anchor / merged["shapes_dir"]).resolve(),
         palettes_dir=(anchor / merged["palettes_dir"]).resolve(),
         out_dir=(anchor / merged["out_dir"]).resolve(),
-        image=ImageConfig(**merged["image"]),
+        backend=_build_backend(merged["backend"]),
         prompt=PromptConfig(**merged["prompt"]),
         postprocess=PostprocessConfig(
             downscale=pp["downscale"],

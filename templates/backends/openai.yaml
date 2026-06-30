@@ -1,0 +1,23 @@
+# OpenAI-compatible image server (LocalAI, llama.cpp image, etc.)
+backend:
+  model: "sd-pixel"
+  gen_size: 512
+  timeout: 120
+  request:
+    method: POST
+    url: "http://localhost:8080/v1/images/generations"
+    headers: { Content-Type: application/json }
+    body:
+      model: "${model}"
+      prompt: "${prompt}"
+      negative_prompt: "${negative}"
+      size: "${gen_width}x${gen_height}"
+      n: 1
+      response_format: b64_json
+      seed: ${seed}
+  response:
+    image_path: "data.0.b64_json"
+    image_kind: base64
+  auth:
+    header: "Authorization"
+    value: "Bearer ${env:IMAGE_API_KEY}"

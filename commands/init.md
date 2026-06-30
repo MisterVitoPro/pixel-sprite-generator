@@ -23,18 +23,23 @@ Look for `${CLAUDE_PROJECT_DIR}/pixel-sprite.config.yaml`.
 Ask each question separately, waiting for the answer before moving on.
 Use the default shown if the user does not provide a value.
 
-1. "Is a local image-generation backend available right now? (yes / no, default: no)"
-   - If **no**: set `mode: grid` and skip the endpoint / model / gen_size questions.
-   - If **yes**: continue with the next questions.
+1. "Which image backend would you like to use? (openai / a1111 / swarmui, default: openai)"
+   - Copy the entire `backend:` block from `${CLAUDE_PLUGIN_ROOT}/templates/backends/<choice>.yaml` for later inclusion in the config.
+   - Load the preset's defaults for the following questions.
 
 2. "What is the endpoint URL for the image API?
-   (default: http://localhost:8080/v1/images/generations)"
+   (default: <preset_default>)"
+   - For a1111 and swarmui: this is the `request.url` from the preset.
+   - For openai: this is the `request.url` from the preset; optionally mention that IMAGE_API_KEY env var can be set to authenticate via Bearer token.
 
-3. "What model name should be requested?
-   (default: sd-pixel)"
+3. If the preset contains a top-level `model` key, ask:
+   "What model name should be requested?
+   (default: <preset_default_model>)"
+   - Store this value for substitution into the backend block.
 
 4. "What generation resolution should be requested from the model in pixels?
-   (default: 512)"
+   (default: <preset_default_gen_size>)"
+   - Store this value for substitution into the backend block.
 
 5. "What output sprite size in pixels should the final PNGs be?
    Must be a positive power of two: 8, 16, 32, 64 ...
@@ -57,8 +62,7 @@ Use the default shown if the user does not provide a value.
    Store as `out_dir`.
 
 After collecting answers, write `${CLAUDE_PROJECT_DIR}/pixel-sprite.config.yaml`.
-Use only the keys that differ from the template defaults; always include `size` and `mode`.
-For image-gen enabled configs also include the `image` block with `endpoint`, `model`, and `gen_size`.
+Include `size`, `mode` (set to `auto`), the four directory paths, the `backend` block (with user-provided values substituted), the `prompt`, `postprocess`, and `pack` blocks from the template.
 
 ---
 

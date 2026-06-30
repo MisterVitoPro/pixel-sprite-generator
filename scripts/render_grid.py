@@ -33,6 +33,11 @@ HEX_RE = re.compile(r"^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
 TRANSPARENT_CHAR = "."
 MAX_EXTENDS_DEPTH = 16
 GRADIENT_AXES = ("x", "y", "diag", "adiag")
+# ordered (Bayer) threshold matrices for 2-color stipple/dither fills
+DITHER_MATRICES = {
+    "bayer2": [[0, 2], [3, 1]],
+    "bayer4": [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]],
+}
 
 ATLAS_APP = "pixel-sprite-generator"
 ATLAS_FORMAT = "RGBA8888"
@@ -59,26 +64,67 @@ def hex_to_rgba(value: Optional[str]) -> tuple[int, int, int, int]:
     return (r, g, b, a)
 
 
-def validate_gradient(palette_name: str, char: str, obj: dict) -> None:
-    """Strict-validate a gradient palette value {from, to, axis}. Raises RenderError."""
-    keys = set(obj.keys())
-    if keys != {"from", "to", "axis"}:
-        raise RenderError(
-            f"palette '{palette_name}': char '{char}' gradient must have exactly keys "
-            f"from/to/axis, got {sorted(keys)}"
-        )
-    for endpoint in ("from", "to"):
-        val = obj[endpoint]
-        if not isinstance(val, str) or not HEX_RE.match(val):
-            raise RenderError(
-                f"palette '{palette_name}': char '{char}' gradient '{endpoint}' "
-                f"has invalid hex '{val}'"
-            )
-    if obj["axis"] not in GRADIENT_AXES:
-        raise RenderError(
-            f"palette '{palette_name}': char '{char}' gradient axis '{obj['axis']}' "
-            f"must be one of {'/'.join(GRADIENT_AXES)}"
-        )
+def _valid_hex(value) -> bool:
+    return isinstance(value, str) and bool(HEX_RE.match(value))
+
+
+def validate_color_value(palette_name: str, char: str, value) -> None:
+    """Strict-validate a palette value. Raises RenderError on anything malformed.
+
+    A value is one of: a ``#RRGGBB``/``#RRGGBBAA`` hex string; ``None`` (transparent);
+    a gradient -- either 2-stop ``{from, to, axis}`` or multi-stop
+    ``{stops: [{pos, color}, ...], axis}`` with ``pos`` in [0, 1]; or a 2-color ordered
+    dither ``{dither: {a, b, matrix?, ratio?}}``.
+    """
+    if value is None or _valid_hex(value):
+        return
+    if not isinstance(value, dict):
+        raise RenderError(f"palette '{palette_name}': char '{char}' has invalid value {value!r}")
+
+    if "dither" in value:
+        extra = set(value) - {"dither"}
+        if extra:
+            raise RenderError(f"palette '{palette_name}': char '{char}' dither value has unexpected keys {sorted(extra)}")
+        d = value["dither"]
+        if not isinstance(d, dict):
+            raise RenderError(f"palette '{palette_name}': char '{char}' 'dither' must be an object")
+        keys = set(d)
+        if not {"a", "b"} <= keys or not keys <= {"a", "b", "matrix", "ratio"}:
+            raise RenderError(f"palette '{palette_name}': char '{char}' dither needs a/b (+ optional matrix/ratio), got {sorted(keys)}")
+        for k in ("a", "b"):
+            if not _valid_hex(d[k]):
+                raise RenderError(f"palette '{palette_name}': char '{char}' dither '{k}' has invalid hex '{d[k]}'")
+        if d.get("matrix", "bayer4") not in DITHER_MATRICES:
+            raise RenderError(f"palette '{palette_name}': char '{char}' dither matrix must be one of {'/'.join(DITHER_MATRICES)}")
+        ratio = d.get("ratio", 0.5)
+        if not isinstance(ratio, (int, float)) or isinstance(ratio, bool) or not 0.0 <= ratio <= 1.0:
+            raise RenderError(f"palette '{palette_name}': char '{char}' dither ratio must be a number in [0, 1]")
+        return
+
+    if "stops" in value:
+        keys = set(value)
+        if "axis" not in keys or not keys <= {"stops", "axis"}:
+            raise RenderError(f"palette '{palette_name}': char '{char}' multi-stop gradient must have keys stops/axis, got {sorted(keys)}")
+        stops = value["stops"]
+        if not isinstance(stops, list) or len(stops) < 2:
+            raise RenderError(f"palette '{palette_name}': char '{char}' gradient 'stops' must be a list of at least 2 stops")
+        for st in stops:
+            if not isinstance(st, dict) or set(st) != {"pos", "color"}:
+                raise RenderError(f"palette '{palette_name}': char '{char}' each stop must have exactly keys pos/color")
+            if not isinstance(st["pos"], (int, float)) or isinstance(st["pos"], bool) or not 0.0 <= st["pos"] <= 1.0:
+                raise RenderError(f"palette '{palette_name}': char '{char}' stop 'pos' must be a number in [0, 1]")
+            if not _valid_hex(st["color"]):
+                raise RenderError(f"palette '{palette_name}': char '{char}' stop 'color' has invalid hex '{st['color']}'")
+    else:
+        keys = set(value)
+        if keys != {"from", "to", "axis"}:
+            raise RenderError(f"palette '{palette_name}': char '{char}' gradient must have exactly keys from/to/axis, got {sorted(keys)}")
+        for endpoint in ("from", "to"):
+            if not _valid_hex(value[endpoint]):
+                raise RenderError(f"palette '{palette_name}': char '{char}' gradient '{endpoint}' has invalid hex '{value[endpoint]}'")
+
+    if value["axis"] not in GRADIENT_AXES:
+        raise RenderError(f"palette '{palette_name}': char '{char}' gradient axis '{value['axis']}' must be one of {'/'.join(GRADIENT_AXES)}")
 
 
 def axis_coord(x: int, y: int, axis: str) -> int:
@@ -95,6 +141,48 @@ def axis_coord(x: int, y: int, axis: str) -> int:
 def lerp_rgba(c0: tuple[int, int, int, int], c1: tuple[int, int, int, int], t: float) -> tuple[int, int, int, int]:
     """Per-channel linear interpolation between two RGBA colors at fraction t in [0, 1]."""
     return tuple(round(c0[i] + t * (c1[i] - c0[i])) for i in range(4))  # type: ignore[return-value]
+
+
+def normalize_stops(grad: dict) -> list[tuple[float, tuple[int, int, int, int]]]:
+    """Flatten a gradient value into a sorted list of (pos, rgba) stops.
+
+    Accepts both the 2-stop ``{from, to, axis}`` sugar and the multi-stop
+    ``{stops: [{pos, color}, ...], axis}`` form.
+    """
+    if "stops" in grad:
+        stops = [(float(s["pos"]), hex_to_rgba(s["color"])) for s in grad["stops"]]
+    else:
+        stops = [(0.0, hex_to_rgba(grad["from"])), (1.0, hex_to_rgba(grad["to"]))]
+    return sorted(stops, key=lambda p: p[0])
+
+
+def sample_ramp(stops: list[tuple[float, tuple[int, int, int, int]]], t: float) -> tuple[int, int, int, int]:
+    """Sample a piecewise-linear color ramp at fraction t in [0, 1]."""
+    if t <= stops[0][0]:
+        return stops[0][1]
+    if t >= stops[-1][0]:
+        return stops[-1][1]
+    for i in range(1, len(stops)):
+        p0, c0 = stops[i - 1]
+        p1, c1 = stops[i]
+        if t <= p1:
+            local = 0.0 if p1 == p0 else (t - p0) / (p1 - p0)
+            return lerp_rgba(c0, c1, local)
+    return stops[-1][1]
+
+
+def dither_color(spec: dict, x: int, y: int) -> tuple[int, int, int, int]:
+    """Pick color a or b for cell (x, y) via an ordered Bayer threshold.
+
+    ``ratio`` is the fraction of cells that take color ``a`` (0..1); the Bayer matrix
+    distributes them in a stable, tileable stipple so two close palette tones read as a
+    textured surface without enlarging the palette.
+    """
+    matrix = DITHER_MATRICES[spec.get("matrix", "bayer4")]
+    n = len(matrix)
+    threshold = (matrix[y % n][x % n] + 0.5) / (n * n)
+    ratio = float(spec.get("ratio", 0.5))
+    return hex_to_rgba(spec["a"] if threshold < ratio else spec["b"])
 
 
 def resolve_palette(name: str, palettes_dir: Path, _seen: Optional[list[str]] = None) -> dict[str, object]:
@@ -128,10 +216,7 @@ def resolve_palette(name: str, palettes_dir: Path, _seen: Optional[list[str]] = 
     if not isinstance(own, dict):
         raise RenderError(f"palette '{name}': 'colors' must be an object")
     for char, value in own.items():
-        if isinstance(value, dict):
-            validate_gradient(name, char, value)
-        elif value is not None and not HEX_RE.match(str(value)):
-            raise RenderError(f"palette '{name}': char '{char}' has invalid hex '{value}'")
+        validate_color_value(name, char, value)
         colors[char] = value
     return colors
 
@@ -202,10 +287,12 @@ def load_shape(path: Path, default_size: int = DEFAULT_SIZE) -> dict:
 def render_shape(shape: dict, palettes_dir: Path, size: int = DEFAULT_SIZE) -> dict[str, "Image.Image"]:
     """Build one RGBA image per output. Validates char coverage against each palette.
 
-    Flat chars (hex / null) paint a single color. A char whose palette value is a
-    gradient object is collected and painted in a second pass: its color is interpolated
-    along the gradient axis across the extent of that char's own cells (so the ramp fills
-    the form wherever the char is placed). A single-line extent resolves to `from`.
+    Flat chars (hex / null) paint a single color. A ``{dither}`` char stipples two colors
+    per cell via an ordered Bayer matrix. A gradient char (2-stop ``{from,to,axis}`` or
+    multi-stop ``{stops,axis}``) is collected and painted in a second pass: its color is
+    sampled from the ramp along the gradient axis across the extent of that char's own
+    cells (so the ramp fills the form wherever the char is placed). A single-line extent
+    resolves to the ramp's first stop.
     """
     rows: list[str] = shape["rows"]
     width, height = resolve_dims(shape, size)
@@ -225,20 +312,22 @@ def render_shape(shape: dict, palettes_dir: Path, size: int = DEFAULT_SIZE) -> d
                     )
                 value = palette[char]
                 if isinstance(value, dict):
-                    gradient_pixels.setdefault(char, []).append((x, y))
+                    if "dither" in value:
+                        px[x, y] = dither_color(value["dither"], x, y)
+                    else:
+                        gradient_pixels.setdefault(char, []).append((x, y))
                 else:
                     px[x, y] = hex_to_rgba(value)
         for char, pixels in gradient_pixels.items():
             grad = palette[char]
             axis = grad["axis"]
-            c_from = hex_to_rgba(grad["from"])
-            c_to = hex_to_rgba(grad["to"])
+            stops = normalize_stops(grad)
             coords = [axis_coord(x, y, axis) for x, y in pixels]
             cmin, cmax = min(coords), max(coords)
             span = cmax - cmin
             for x, y in pixels:
                 t = 0.0 if span == 0 else (axis_coord(x, y, axis) - cmin) / span
-                px[x, y] = lerp_rgba(c_from, c_to, t)
+                px[x, y] = sample_ramp(stops, t)
         images[output_name] = img
     return images
 

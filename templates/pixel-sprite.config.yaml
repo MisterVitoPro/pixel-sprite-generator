@@ -14,18 +14,29 @@ shapes_dir: art/shapes
 palettes_dir: art/palettes
 out_dir: assets/sprites
 
-# Image generation backend (OpenAI-compatible endpoint)
-image:
-  endpoint: http://localhost:8080/v1/images/generations
-  model: sd-pixel
-  api_key_env: null       # env var name whose value is sent as Bearer token; null = no auth
-  timeout: 120            # seconds before the request is aborted
-  gen_size: 512           # resolution requested from the model (pre-downscale)
-  params:
-    steps: 30
-    cfg_scale: 7
-    sampler: euler_a
-    seed: null            # null = random each run; set an integer for reproducibility
+# image backend: copy a preset from templates/backends/ (openai | a1111 | swarmui)
+backend:
+  model: "sd-pixel"
+  gen_size: 512
+  timeout: 120
+  request:
+    method: POST
+    url: "http://localhost:8080/v1/images/generations"
+    headers: { Content-Type: application/json }
+    body:
+      model: "${model}"
+      prompt: "${prompt}"
+      negative_prompt: "${negative}"
+      size: "${gen_width}x${gen_height}"
+      n: 1
+      response_format: b64_json
+      seed: ${seed}
+  response:
+    image_path: "data.0.b64_json"
+    image_kind: base64
+  auth:
+    header: "Authorization"
+    value: "Bearer ${env:IMAGE_API_KEY}"
 
 # Prompt construction: final prompt = "<prefix> <spec.prompt> <suffix>"
 prompt:
